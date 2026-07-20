@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#2563eb">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="icon.png">
+    <link class="apple-touch-icon" href="icon.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -38,9 +38,22 @@
 
     <!-- Header -->
     <header class="bg-blue-600 text-white py-6 shadow-md text-center relative">
+        <!-- KHU VỰC THÔNG TIN TÀI KHOẢN KHI ĐÃ ĐĂNG NHẬP (GÓC TRÁI) -->
+        <div id="user-logged-badge" class="hidden absolute top-4 left-4 bg-blue-700/50 px-3 py-1.5 rounded-xl border border-blue-500 flex items-center gap-2 text-xs animate-fade-in">
+            <span class="font-bold text-emerald-300 flex items-center gap-1">
+                <i class="fa-solid fa-circle-user text-[10px] animate-pulse text-emerald-400"></i> 
+                <span id="display-username">...</span>
+            </span>
+            <span class="w-[1px] h-3 bg-blue-500"></span>
+            <button onclick="logoutFirebase()" class="text-blue-200 hover:text-rose-300 font-medium transition flex items-center gap-0.5" title="Đăng xuất / Đổi tài khoản khác">
+                <i class="fa-solid fa-right-from-bracket text-[10px]"></i> Đăng xuất
+            </button>
+        </div>
+
         <h1 class="text-3xl font-bold">🧠 AI English Flashcards v3.0 Pro</h1>
         <p class="text-blue-100 mt-2 text-sm">Hệ Thống Lặp Lại Ngắt Quãng SRS & Siêu Luyện Tập Đa Phản Xạ</p>
         
+        <!-- CHẾ ĐỘ TEST (GÓC PHẢI) -->
         <div class="absolute top-4 right-4 bg-blue-700/50 px-3 py-1.5 rounded-xl border border-blue-500 flex items-center gap-2 text-xs">
             <span class="font-medium text-blue-200">Chế độ Test (Bỏ qua ngày):</span>
             <button id="test-mode-toggle" onclick="toggleTestMode()" class="bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">ON</button>
@@ -78,8 +91,8 @@
         </div>
     </div>
 
-    <!-- KHU VỰC CẤU HÌNH ĐỒNG BỘ CLOUD FIREBASE -->
-    <div class="max-w-6xl mx-auto mt-4 px-4">
+    <!-- KHU VỰC CẤU HÌNH ĐỒNG BỘ CLOUD FIREBASE (SẼ ẨN KHI ĐÃ ĐĂNG NHẬP) -->
+    <div id="fb-login-panel" class="max-w-6xl mx-auto mt-4 px-4">
         <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div>
                 <label class="block text-xs font-bold text-slate-500 uppercase mb-1">✍️ ID tài khoản cá nhân:</label>
@@ -1247,14 +1260,12 @@
                 return;
             }
 
-            // Tự động bọc ngoặc nhọn nếu người dùng quên copy ngoặc nhọn ở ngoài
             if (!configRaw.startsWith('{')) configRaw = '{' + configRaw;
             if (!configRaw.endsWith('}')) configRaw = configRaw + '}';
 
             try {
                 const config = JSON.parse(configRaw);
                 
-                // Khởi tạo app Firebase
                 if (firebase.apps.length === 0) {
                     firebase.initializeApp(config);
                 }
@@ -1262,10 +1273,8 @@
                 statusLabel.innerText = "ĐANG KẾT NỐI...";
                 statusLabel.className = "bg-amber-100 text-amber-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
 
-                // Chỉ định thư mục lưu dữ liệu theo ID tài khoản của bạn trên mây
                 databaseRef = firebase.database().ref('users/' + userId + '/flashcards');
 
-                // Lắng nghe dữ liệu đổ về từ server thời gian thực
                 databaseRef.on('value', (snapshot) => {
                     const cloudData = snapshot.val();
                     if (cloudData && Array.isArray(cloudData)) {
@@ -1275,32 +1284,51 @@
                         
                         refreshDashboard();
                         updateFlashcardUI();
-                        
                         isFirebaseUpdating = false;
-                        statusLabel.innerText = "☁️ LIVE SYNC";
-                        statusLabel.className = "bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
                     } else {
-                        // Nếu thư mục trên cloud trống (lần đầu kết nối), đẩy ngược dữ liệu local lên cloud luôn
                         if (flashcards.length > 0) {
                             databaseRef.set(flashcards);
                         }
-                        statusLabel.innerText = "☁️ LIVE SYNC";
-                        statusLabel.className = "bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
                     }
+
+                    // ĐĂNG NHẬP THÀNH CÔNG: Kích hoạt ẩn/hiện giao diện thông minh
+                    document.getElementById('fb-login-panel').classList.add('hidden'); // Ẩn thanh nhập cồng kềnh
+                    document.getElementById('display-username').innerText = userId; // Hiện tên ở header
+                    document.getElementById('user-logged-badge').classList.remove('hidden'); // Hiện badge nhỏ
                     
-                    // Lưu lại cấu hình để lần sau tự kết nối không bắt nhập lại
                     localStorage.setItem('fb_user_id', userId);
                     localStorage.setItem('fb_config_json', configRaw);
                 }, (error) => {
                     console.error(error);
                     statusLabel.innerText = "❌ LỖI RULES";
                     statusLabel.className = "bg-rose-100 text-rose-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
-                    alert("Kết nối thất bại! Bạn hãy kiểm tra lại xem đã sửa Rules (Bước 3) trên Firebase thành true chưa nhé.");
+                    alert("Kết nối thất bại! Bạn hãy kiểm tra lại xem đã sửa Rules trên Firebase thành true chưa nhé.");
                 });
 
             } catch (err) {
                 alert("Đoạn Firebase Config JSON lỗi định dạng cấu trúc, hãy copy lại chuẩn xác!");
                 console.error(err);
+            }
+        }
+
+        // HÀM ĐĂNG XUẤT ĐỂ ĐỔI TÀI KHOẢN KHÁC
+        function logoutFirebase() {
+            if (confirm("Bạn có chắc chắn muốn đăng xuất tài khoản này không? Dữ liệu local vẫn sẽ được giữ lại.")) {
+                if (databaseRef) {
+                    databaseRef.off(); // Ngắt cổng lắng nghe Realtime của tài khoản cũ
+                }
+                
+                // Xóa thông tin đăng nhập cũ trong bộ nhớ
+                localStorage.removeItem('fb_user_id');
+                localStorage.removeItem('fb_config_json');
+                
+                // Trả giao diện về trạng thái ban đầu
+                document.getElementById('user-logged-badge').classList.add('hidden');
+                document.getElementById('fb-login-panel').classList.remove('hidden');
+                document.getElementById('sync-status').innerText = "OFFLINE";
+                document.getElementById('sync-status').className = "bg-slate-100 text-slate-500 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
+                
+                alert("Đã đăng xuất! Bạn có thể nhập thông tin tài khoản khác ngay bây giờ.");
             }
         }
 
