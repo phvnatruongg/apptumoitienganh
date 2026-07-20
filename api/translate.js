@@ -1,85 +1,58 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path'); // 1. THÊM THƯ VIỆN ĐỂ XỬ LÝ ĐƯỜNG DẪN FILE
-require('dotenv').config();
+const { Groq } = require('@groq/groq-sdk'); // Hoặc require('groq-sdk') tùy thuộc vào thư viện bạn đang dùng ở package.json
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// 2. BẮT BUỘC: Cấu hình cho Server phục vụ các file tĩnh trong thư mục gốc (index.html, manifest.json, sw.js, icon.png...)
-app.use(express.static(__dirname));
-
-// 🛠️ KEY PIXABAY CỦA BẠN:
-const PIXABAY_KEY = '56753602-ea75e73c98316218e67432c1e'; 
-
-app.post('/api/translate', async (req, res) => {
-    const { word } = req.body;
-
-    if (!word) {
-        return res.status(400).json({ error: 'Vui lòng nhập từ!' });
-    }
-
-    try {
-        const prompt = `Analyze the English word "${word}". Return a JSON object with this exact structure:
-        {
-          "word": "${word}",
-          "type": "noun/verb/adjective",
-          "vietnamese": "nghĩa tiếng Việt chuẩn xác nhất (ví dụ 'honey badger' phải là 'lửng mật')",
-          "mnemonic": "mẹo nhớ từ vui bằng tiếng Việt dựa trên phát âm hoặc ý nghĩa đặc trưng của từ",
-          "examples": ["Ví dụ 1 bằng tiếng Việt", "Ví dụ 2 bằng tiếng Việt"],
-          "image_url": ""
-        }
-        Do not write any text or markdown code blocks outside JSON.`;
-
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: 'llama-3.1-8b-instant', 
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.1, 
-                response_format: { type: "json_object" }
-            })
-        });
-
-        const data = await response.json();
-        if (data.error) throw new Error(JSON.stringify(data.error));
-
-        let rawText = data.choices[0].message.content.trim();
-        const cleanJson = JSON.parse(rawText);
-        
-        try {
-            const query = encodeURIComponent(word.trim().toLowerCase());
-            const pixabayUrl = `https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${query}&image_type=photo&per_page=3`;
-            
-            const pixabayResponse = await fetch(pixabayUrl);
-            const pixabayData = await pixabayResponse.json();
-            
-            if (pixabayData.hits && pixabayData.hits.length > 0) {
-                cleanJson.image_url = pixabayData.hits[0].webformatURL;
-            } else {
-                cleanJson.image_url = "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=600";
-            }
-        } catch (imgErr) {
-            cleanJson.image_url = "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=600";
-        }
-
-        res.json(cleanJson);
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: `Lỗi xử lý hệ thống: ${error.message}` });
-    }
+// Cấu hình khởi tạo Groq sử dụng biến môi trường của Vercel
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
 });
 
-// 3. BẮT BUỘC: Khi người dùng truy cập vào link web, tự động gửi file giao diện index.html về trình duyệt
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+module.exports = async (req, res) => {
+  // Cấu hình CORS để giao diện index.html có thể gọi vào API này mượt mà
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server Game đang chạy tại cổng ${PORT}`));
+  // Xử lý request kiểm tra (Preflight) từ trình duyệt
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Chỉ chấp nhận phương thức POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Phương thức không hợp lệ' });
+  }
+
+  const { word } = req.body;
+  if (!word) {
+    return res.status(400).json({ error: 'Vui lòng nhập từ!' });
+  }
+
+  try {
+    // Câu lệnh Prompt thông minh: nhận diện cả tiếng Anh và tiếng Trung như bạn muốn nhé!
+    const prompt = `Bạn là một chuyên gia ngôn ngữ và trợ lý học tập thông minh. Khi người dùng gửi một từ hoặc cụm từ thuộc bất kỳ ngôn ngữ nào (Anh, Trung, Hàn, Nhật...), hãy tự động nhận diện ngôn ngữ đó. Sau đó, hãy dịch, phiên âm (Pinyin kèm dấu nếu là tiếng Trung) và giải thích nghĩa chi tiết, đặt câu ví dụ bằng tiếng Việt một cách dễ hiểu nhất. 
+    Trả về một đối tượng JSON khớp chính xác với cấu trúc sau:
+    {
+      "word": "${word}",
+      "type": "loại từ (noun/verb/adjective... hoặc từ loại tiếng Trung)",
+      "vietnamese": "nghĩa tiếng Việt chính xác nhất",
+      "mnemonic": "mẹo nhớ từ vui vẻ bằng tiếng Việt dựa trên phát âm hoặc ý nghĩa đặc trưng của từ",
+      "example_en": "câu ví dụ bằng chính ngôn ngữ đó",
+      "example_vi": "dịch nghĩa của câu ví dụ sang tiếng Việt"
+    }`;
+
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama3-8b-8192', // Hoặc model miatral/gemma bạn đang chạy ở local
+      response_format: { type: "json_object" } // Ép Groq trả về JSON chuẩn
+    });
+
+    // Lấy chuỗi JSON trả về từ AI và parse thành Object
+    const aiResponse = JSON.parse(completion.choices[0].message.content);
+    
+    // Trả kết quả về cho giao diện index.html
+    return res.status(200).json(aiResponse);
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Lỗi xử lý AI Server: ' + error.message });
+  }
+};
