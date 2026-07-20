@@ -1,0 +1,18 @@
+{
+  "name": "AI English Flashcards Pro",
+  "short_name": "AI Flashcards",
+  "description": "Hệ thống học tiếng Anh lặp lại ngắt quãng SRS",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme-color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
