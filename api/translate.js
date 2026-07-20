@@ -1,11 +1,10 @@
-const { Groq } = require('groq/groq-sdk');
+const Groq = require('groq-sdk');
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 });
 
 module.exports = async function handler(req, res) {
-  // Cho phép CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
