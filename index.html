@@ -14,6 +14,11 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Nhúng Firebase SDK bản tương thích trực tiếp để chạy đồng bộ không cần build -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
     <style>
         .flashcard-container { perspective: 1000px; }
         .flashcard {
@@ -70,6 +75,26 @@
         <div class="bg-blue-50 p-3 rounded-xl shadow-sm border border-blue-100">
             <div class="text-xs text-blue-600 font-semibold uppercase">Chuỗi ngày học</div>
             <div id="dash-streak" class="text-xl font-bold text-blue-600">0 ngày</div>
+        </div>
+    </div>
+
+    <!-- KHU VỰC CẤU HÌNH ĐỒNG BỘ CLOUD FIREBASE -->
+    <div class="max-w-6xl mx-auto mt-4 px-4">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">✍️ ID tài khoản cá nhân:</label>
+                <input type="text" id="fb-user-id" placeholder="Ví dụ: kuro_srs" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">⚙️ Firebase Config JSON:</label>
+                <input type="text" id="fb-config-json" placeholder="Dán đoạn mã có dấu { } vào đây..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="flex gap-2">
+                <button onclick="initFirebaseSync()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Kết nối & Đồng bộ
+                </button>
+                <span id="sync-status" class="bg-slate-100 text-slate-500 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap">OFFLINE</span>
+            </div>
         </div>
     </div>
 
@@ -366,6 +391,10 @@
         let selectedEnglishBtn = null;
         let selectedVietnameseBtn = null;
 
+        // Biến toàn cục phục vụ kết nối Firebase Realtime Database
+        let databaseRef = null;
+        let isFirebaseUpdating = false;
+
         const DEFAULT_DISTRACTORS = ["Trái táo", "Xin chào", "Cảm ơn", "Con chó", "Học tập", "Hạnh phúc", "Thái độ", "Kiên trì", "Thành công", "Sáng tạo"];
 
         function speakWord(text) {
@@ -560,7 +589,6 @@
             resBox.classList.add('hidden');
 
             try {
-                // ĐÃ SỬA: Đường dẫn tương đối để tương thích khi đẩy lên Render
                 const response = await fetch('/api/translate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -588,6 +616,15 @@
             }
         }
 
+        // Hàm lõi hỗ trợ lưu LocalStorage và đẩy trực tiếp dữ liệu lên mây Firebase
+        function saveLocalAndSyncCloud() {
+            localStorage.setItem('flashcards', JSON.stringify(flashcards));
+            if (databaseRef && !isFirebaseUpdating) {
+                databaseRef.set(flashcards)
+                    .catch(err => console.error("Lỗi đồng bộ dữ liệu lên Firebase:", err));
+            }
+        }
+
         function saveCard() {
             if (!currentTranslationData) return;
             if (flashcards.some(c => c.word.toLowerCase() === currentTranslationData.word.toLowerCase())) {
@@ -608,7 +645,7 @@
             };
             
             flashcards.push(newCard);
-            localStorage.setItem('flashcards', JSON.stringify(flashcards));
+            saveLocalAndSyncCloud();
             
             recordStudyActivity();
 
@@ -663,7 +700,7 @@
             if (originalIndex !== -1) {
                 const sentenceVal = document.getElementById('card-user-sentence').value.trim();
                 flashcards[originalIndex].user_sentence = sentenceVal;
-                localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                saveLocalAndSyncCloud();
                 alert('Đã lưu câu ví dụ tự đặt thành công! ✍️');
             }
         }
@@ -1076,7 +1113,7 @@
             currentReviewWord.nextReviewDate = Date.now() + (currentReviewWord.interval * 86400000);
 
             recordStudyActivity(); 
-            localStorage.setItem('flashcards', JSON.stringify(flashcards));
+            saveLocalAndSyncCloud();
             updateFlashcardUI();
             refreshDashboard();
 
@@ -1122,7 +1159,7 @@
                                     flashcards.push(newCard);
                                 }
                             });
-                            localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                            saveLocalAndSyncCloud();
                             refreshDashboard();
                             updateFlashcardUI();
                             alert('Nhập dữ liệu dự phòng JSON thành công! 🎉');
@@ -1181,7 +1218,7 @@
             const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
             if (idx !== -1) {
                 flashcards[idx].vietnamese = newVnValue.trim();
-                localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                saveLocalAndSyncCloud();
                 refreshDashboard();
                 updateFlashcardUI();
             }
@@ -1190,7 +1227,7 @@
         function deleteCardDirectly(word) {
             if (confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn từ "${word}"?`)) {
                 flashcards = flashcards.filter(c => c.word.toLowerCase() !== word.toLowerCase());
-                localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                saveLocalAndSyncCloud();
                 currentCardIndex = 0;
                 refreshDashboard();
                 updateFlashcardUI();
@@ -1199,14 +1236,92 @@
             }
         }
 
+        // ================= CƠ CHẾ ĐỒNG BỘ REALTIME DATABASE =================
+        function initFirebaseSync() {
+            const userId = document.getElementById('fb-user-id').value.trim();
+            let configRaw = document.getElementById('fb-config-json').value.trim();
+            const statusLabel = document.getElementById('sync-status');
+
+            if (!userId || !configRaw) {
+                alert("Vui lòng điền đầy đủ ID tài khoản và Firebase Config JSON!");
+                return;
+            }
+
+            // Tự động bọc ngoặc nhọn nếu người dùng quên copy ngoặc nhọn ở ngoài
+            if (!configRaw.startsWith('{')) configRaw = '{' + configRaw;
+            if (!configRaw.endsWith('}')) configRaw = configRaw + '}';
+
+            try {
+                const config = JSON.parse(configRaw);
+                
+                // Khởi tạo app Firebase
+                if (firebase.apps.length === 0) {
+                    firebase.initializeApp(config);
+                }
+                
+                statusLabel.innerText = "ĐANG KẾT NỐI...";
+                statusLabel.className = "bg-amber-100 text-amber-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
+
+                // Chỉ định thư mục lưu dữ liệu theo ID tài khoản của bạn trên mây
+                databaseRef = firebase.database().ref('users/' + userId + '/flashcards');
+
+                // Lắng nghe dữ liệu đổ về từ server thời gian thực
+                databaseRef.on('value', (snapshot) => {
+                    const cloudData = snapshot.val();
+                    if (cloudData && Array.isArray(cloudData)) {
+                        isFirebaseUpdating = true;
+                        flashcards = cloudData;
+                        localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                        
+                        refreshDashboard();
+                        updateFlashcardUI();
+                        
+                        isFirebaseUpdating = false;
+                        statusLabel.innerText = "☁️ LIVE SYNC";
+                        statusLabel.className = "bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
+                    } else {
+                        // Nếu thư mục trên cloud trống (lần đầu kết nối), đẩy ngược dữ liệu local lên cloud luôn
+                        if (flashcards.length > 0) {
+                            databaseRef.set(flashcards);
+                        }
+                        statusLabel.innerText = "☁️ LIVE SYNC";
+                        statusLabel.className = "bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
+                    }
+                    
+                    // Lưu lại cấu hình để lần sau tự kết nối không bắt nhập lại
+                    localStorage.setItem('fb_user_id', userId);
+                    localStorage.setItem('fb_config_json', configRaw);
+                }, (error) => {
+                    console.error(error);
+                    statusLabel.innerText = "❌ LỖI RULES";
+                    statusLabel.className = "bg-rose-100 text-rose-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
+                    alert("Kết nối thất bại! Bạn hãy kiểm tra lại xem đã sửa Rules (Bước 3) trên Firebase thành true chưa nhé.");
+                });
+
+            } catch (err) {
+                alert("Đoạn Firebase Config JSON lỗi định dạng cấu trúc, hãy copy lại chuẩn xác!");
+                console.error(err);
+            }
+        }
+
+        // Tự động nạp thông tin kết nối cũ nếu đã cấu hình từ trước
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedId = localStorage.getItem('fb_user_id');
+            const savedConfig = localStorage.getItem('fb_config_json');
+            if (savedId && savedConfig) {
+                document.getElementById('fb-user-id').value = savedId;
+                document.getElementById('fb-config-json').value = savedConfig;
+                initFirebaseSync();
+            }
+        });
+
         updateFlashcardUI();
         refreshDashboard();
 
-        // ĐÃ THÊM: Script tự động đăng ký Service Worker để đủ điều kiện chạy PWA (Cài app có Icon)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('🔔 Service Worker đã đăng ký thành công thành công!', reg))
+                    .then(reg => console.log('🔔 Service Worker đã đăng ký thành công!', reg))
                     .catch(err => console.error('❌ Đăng ký Service Worker thất bại:', err));
             });
         }
