@@ -25,7 +25,8 @@
             position: relative; width: 100%; height: 100%;
             transform-style: preserve-3d; transition: transform 0.6s; cursor: pointer;
         }
-        .flashcard.flipped { transform: rotateY(180deg); } front, .back {
+        .flashcard.flipped { transform: rotateY(180deg); } 
+        .front, .back {
             position: absolute; width: 100%; height: 100%;
             backface-visibility: hidden; display: flex;
             flex-direction: column; align-items: center; justify-content: center;
@@ -424,7 +425,7 @@
             if (!currentQuizWord || !currentQuizWord.examples || currentQuizWord.examples.length === 0) return;
             let targetText = currentQuizSelectedSentence;
 
-            const containsVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(targetText);
+            const containsVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổổơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(targetText);
 
             if (containsVietnamese) {
                 try {
@@ -611,18 +612,29 @@
                 if (data.error) throw new Error(data.error);
 
                 currentTranslationData = data;
-                document.getElementById('res-word').innerText = data.word;
-                document.getElementById('res-type').innerText = `(${data.type})`;
-                document.getElementById('res-vietnamese').innerText = data.vietnamese;
-                document.getElementById('res-mnemonic').innerText = data.mnemonic;
+                document.getElementById('res-word').innerText = data.word || wordInput;
+                document.getElementById('res-type').innerText = data.type ? `(${data.type})` : '';
+                document.getElementById('res-vietnamese').innerText = data.vietnamese || 'Không có nghĩa';
+                document.getElementById('res-mnemonic').innerText = data.mnemonic || 'Đang cập nhật...';
+
+                // Bẫy lỗi an toàn: Kiểm tra tất cả các trường hợp tên biến mảng ví dụ mà AI có thể trả về
+                const examplesArray = data.examples || data.example || data.sentences || data.list_examples || [];
 
                 const ul = document.getElementById('res-examples');
                 ul.innerHTML = '';
-                data.examples.forEach(ex => {
+                
+                if (Array.isArray(examplesArray) && examplesArray.length > 0) {
+                    examplesArray.forEach(ex => {
+                        const li = document.createElement('li');
+                        li.innerText = ex;
+                        ul.appendChild(li);
+                    });
+                } else {
                     const li = document.createElement('li');
-                    li.innerText = ex;
+                    li.innerText = "Không có câu ví dụ nào được cung cấp.";
                     ul.appendChild(li);
-                });
+                }
+
                 resBox.classList.remove('hidden');
             } catch (err) {
                 alert(`Lỗi kết nối AI Server: ${err.message}`);
