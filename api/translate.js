@@ -8,12 +8,12 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Thiếu từ cần tra!' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-        return res.status(500).json({ error: 'Chưa cấu hình GEMINI_API_KEY trên Vercel!' });
+        return res.status(500).json({ error: 'Chưa cấu hình GROQ_API_KEY trên Vercel!' });
     }
 
-    const prompt = `Phân tích từ tiếng Anh "${word}" và trả về kết quả dạng JSON thuần túy (không kèm markdown như \`\`\`json) với cấu trúc chính xác sau:
+    const prompt = `Phân tích từ tiếng Anh "${word}" và trả về kết quả dạng JSON thuần túy (không kèm markdown như \`\`\`json, không kèm chữ thừa) với cấu trúc chính xác sau:
 {
   "word": "${word}",
   "type": "loại từ (noun, verb, adj, adv...)",
@@ -27,26 +27,31 @@ export default async function handler(req, res) {
 }`;
 
     try {
-        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
+                model: 'llama-3.3-70b-versatile',
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.3,
+                response_format: { type: "json_object" }
             })
         });
 
-        const data = await geminiRes.json();
+        const data = await groqRes.json();
         
         if (data.error) {
-            throw new Error(data.error.message || 'Lỗi từ Google Gemini API');
+            throw new Error(data.error.message || 'Lỗi từ Groq API');
         }
 
-        const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const candidateText = data.choices?.[0]?.message?.content;
         if (!candidateText) {
-            throw new Error('AI không trả về dữ liệu phản hồi.');
+            throw new Error('Groq AI không trả về dữ liệu phản hồi.');
         }
 
-        // Làm sạch định dạng Markdown nếu AI lỡ trả về bọc trong ```json ... ```
         let cleanJSON = candidateText.trim();
         if (cleanJSON.startsWith('```json')) {
             cleanJSON = cleanJSON.replace(/^```json/, '').replace(/```$/, '').trim();
