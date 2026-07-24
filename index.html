@@ -155,8 +155,8 @@
                     <i class="fa-solid fa-magnifying-glass text-blue-500"></i> Tra Từ AI
                 </h2>
                 <div class="flex gap-2 mb-3">
-                    <input type="text" id="word-input" placeholder="Nhập từ tiếng Anh..." class="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                    <button onclick="translateWord()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition whitespace-nowrap">Tra từ</button>
+                    <input type="text" id="word-input" onkeydown="if(event.key==='Enter') translateWord()" placeholder="Nhập từ tiếng Anh..." class="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    <button id="btn-translate" onclick="translateWord()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition whitespace-nowrap">Tra từ</button>
                 </div>
 
                 <div class="mb-3">
@@ -173,10 +173,10 @@
                         <button onclick="speakWord(document.getElementById('res-word').innerText)" class="text-blue-500 hover:text-blue-700 p-2 text-lg"><i class="fa-solid fa-volume-high"></i></button>
                     </div>
 
-                    <!-- Bổ sung Khung Xem Trước Hình Ảnh API -->
+                    <!-- Khung Xem Trước Hình Ảnh API -->
                     <div id="res-img-container" class="relative w-full h-36 rounded-xl overflow-hidden bg-slate-100 border hidden">
                         <img id="res-img-preview" src="" class="w-full h-full object-cover" onerror="handleImageError(this)">
-                        <span class="absolute bottom-1.5 right-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded backdrop-blur-sm"><i class="fa-solid fa-image mr-1"></i> AI Image API</span>
+                        <span class="absolute bottom-1.5 right-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded backdrop-blur-sm"><i class="fa-solid fa-image mr-1"></i> Image Preview</span>
                     </div>
 
                     <div id="res-vietnamese" class="text-lg font-semibold text-emerald-600"></div>
@@ -405,7 +405,6 @@
         const DEFAULT_FALLBACK_IMG = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d";
         const DEFAULT_DISTRACTORS = ["Trái táo", "Xin chào", "Cảm ơn", "Con chó", "Học tập", "Hạnh phúc", "Thái độ", "Kiên trì", "Thành công", "Sáng tạo"];
 
-        // Hàm xử lý khi ảnh lỗi đường dẫn
         function handleImageError(imgEl) {
             imgEl.onerror = null; 
             imgEl.src = DEFAULT_FALLBACK_IMG;
@@ -424,18 +423,6 @@
         async function speakReverseTarget() {
             if (!currentQuizWord || !currentQuizWord.examples || currentQuizWord.examples.length === 0) return;
             let targetText = currentQuizSelectedSentence;
-            const containsVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(targetText);
-
-            if (containsVietnamese) {
-                try {
-                    const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=en&dt=t&q=${encodeURIComponent(targetText)}`);
-                    const json = await res.json();
-                    if(json && json[0] && json[0][0] && json[0][0][0]) {
-                        targetText = json[0][0][0];
-                        currentQuizSelectedSentence = targetText; 
-                    }
-                } catch(e) { console.error(e); }
-            }
             speakWord(targetText);
         }
 
@@ -568,55 +555,63 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
+        // HÀM TRA TỪ CHÍNH XÁC KHÔNG CẦN BACKEND SERVER
         async function translateWord() {
             const wordInput = document.getElementById('word-input').value.trim();
             if (!wordInput) return alert('Hãy gõ từ cần tra!');
+            
+            const btnTranslate = document.getElementById('btn-translate');
+            btnTranslate.disabled = true;
+            btnTranslate.innerText = "Đang tra...";
+
             const resBox = document.getElementById('result-box');
             resBox.classList.add('hidden');
 
             try {
-                const response = await fetch('/api/translate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ word: wordInput })
-                });
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
+                // Tra từ qua API Google Translate Client công khai
+                const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(wordInput)}`);
+                const data = await res.json();
 
-                currentTranslationData = data;
-                document.getElementById('res-word').innerText = data.word || wordInput;
-                document.getElementById('res-type').innerText = data.type ? `(${data.type})` : '';
-                document.getElementById('res-vietnamese').innerText = data.vietnamese || 'Không có nghĩa';
-                document.getElementById('res-mnemonic').innerText = data.mnemonic || 'Đang cập nhật...';
+                if (!data || !data[0] || !data[0][0]) throw new Error("Không tìm thấy kết quả!");
 
-                // Xử lý và hiển thị hình ảnh từ API AI
+                const vietnameseMeaning = data[0][0][0];
+                let wordType = "Word";
+                if (data[1] && data[1][0] && data[1][0][0]) {
+                    wordType = data[1][0][0];
+                }
+
+                // Tự động tạo câu ví dụ cơ bản
+                const sampleExample = `I study the word '${wordInput}' every day.`;
+                const imgUrl = `https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=500&auto=format&fit=crop&q=80`;
+
+                currentTranslationData = {
+                    word: wordInput,
+                    type: wordType,
+                    vietnamese: vietnameseMeaning,
+                    mnemonic: `Nhớ từ "${wordInput}" gắn liền với nghĩa: ${vietnameseMeaning}`,
+                    examples: [sampleExample],
+                    image_url: imgUrl
+                };
+
+                document.getElementById('res-word').innerText = currentTranslationData.word;
+                document.getElementById('res-type').innerText = `(${currentTranslationData.type})`;
+                document.getElementById('res-vietnamese').innerText = currentTranslationData.vietnamese;
+                document.getElementById('res-mnemonic').innerText = currentTranslationData.mnemonic;
+
                 const imgContainer = document.getElementById('res-img-container');
                 const imgPreview = document.getElementById('res-img-preview');
-                const imgUrl = data.image_url || data.image || `https://source.unsplash.com/featured/?${encodeURIComponent(wordInput)}`;
-                
-                if (imgUrl) {
-                    currentTranslationData.image_url = imgUrl;
-                    imgPreview.src = imgUrl;
-                    imgContainer.classList.remove('hidden');
-                } else {
-                    imgContainer.classList.add('hidden');
-                }
+                imgPreview.src = currentTranslationData.image_url;
+                imgContainer.classList.remove('hidden');
 
-                const examplesArray = data.examples || data.example || [];
                 const ul = document.getElementById('res-examples');
-                ul.innerHTML = '';
-                if (Array.isArray(examplesArray) && examplesArray.length > 0) {
-                    examplesArray.forEach(ex => {
-                        const li = document.createElement('li');
-                        li.innerText = ex;
-                        ul.appendChild(li);
-                    });
-                } else {
-                    ul.innerHTML = '<li>Không có câu ví dụ.</li>';
-                }
+                ul.innerHTML = `<li>${sampleExample}</li>`;
+
                 resBox.classList.remove('hidden');
             } catch (err) {
-                alert(`Lỗi kết nối AI Server: ${err.message}`);
+                alert(`Lỗi tra từ vựng: ${err.message}`);
+            } finally {
+                btnTranslate.disabled = false;
+                btnTranslate.innerText = "Tra từ";
             }
         }
 
@@ -1088,7 +1083,6 @@
                 document.getElementById('display-username').innerText = userId;
                 document.getElementById('user-logged-badge').classList.remove('hidden');
 
-                // Lắng nghe biến động Realtime
                 databaseRef.on('value', (snapshot) => {
                     const data = snapshot.val();
                     if(data && Array.isArray(data)) {
