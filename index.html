@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI English Flashcards v3.1 Pro</title>
+    <title>AI English Flashcards v3.1 Pro - Fixed Image API</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
@@ -22,7 +22,7 @@
         .flashcard {
             position: relative; width: 100%; height: 100%;
             transform-style: preserve-3d; transition: transform 0.4s ease; cursor: pointer;
-            will-change: transform; /* Tối ưu phần cứng di động chống lag */
+            will-change: transform;
         }
         .flashcard.flipped { transform: rotateY(180deg); } 
         .front, .back {
@@ -61,7 +61,7 @@
     <!-- Xuất/Nhập & Đăng ký thông báo đẩy -->
     <div class="max-w-6xl mx-auto mt-3 px-4 flex flex-wrap justify-between items-center gap-2 text-xs">
         <button onclick="requestNotificationPermission()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 shadow-sm">
-            <i class="fa-solid fa-bell"></i> Bật thông báo ngẫu nhiên 9h-22h
+            <i class="fa-solid fa-bell"></i> Bật thông báo ngẫu nhiên
         </button>
         <div class="flex gap-2">
             <button onclick="exportData()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1">
@@ -99,11 +99,11 @@
         <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">ID tài khoản cá nhân:</label>
-                <input type="text" id="fb-user-id" placeholder="Ví dụ: kuro_srs" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="fb-user-id" placeholder="Ví dụ: my_flashcards_user" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Firebase Config JSON:</label>
-                <input type="text" id="fb-config-json" placeholder="Dán đoạn mã { } vào đây..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="fb-config-json" placeholder="Dán mã JSON cấu hình Firebase..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div class="flex gap-2">
                 <button onclick="initFirebaseSync()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1">
@@ -172,6 +172,13 @@
                         </div>
                         <button onclick="speakWord(document.getElementById('res-word').innerText)" class="text-blue-500 hover:text-blue-700 p-2 text-lg"><i class="fa-solid fa-volume-high"></i></button>
                     </div>
+
+                    <!-- Bổ sung Khung Xem Trước Hình Ảnh API -->
+                    <div id="res-img-container" class="relative w-full h-36 rounded-xl overflow-hidden bg-slate-100 border hidden">
+                        <img id="res-img-preview" src="" class="w-full h-full object-cover" onerror="handleImageError(this)">
+                        <span class="absolute bottom-1.5 right-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded backdrop-blur-sm"><i class="fa-solid fa-image mr-1"></i> AI Image API</span>
+                    </div>
+
                     <div id="res-vietnamese" class="text-lg font-semibold text-emerald-600"></div>
                     <div class="bg-amber-50 border border-amber-100 p-3 rounded-xl text-xs text-amber-800">
                         <strong>💡 Mẹo nhớ:</strong> <span id="res-mnemonic"></span>
@@ -197,7 +204,7 @@
                 <div class="flashcard-container w-full h-72 mb-3 select-none">
                     <div class="flashcard" id="card" onclick="toggleCardFlip()">
                         <div class="front bg-slate-900 text-white p-5 border border-slate-800 text-center overflow-hidden">
-                            <img id="card-img" src="https://images.unsplash.com/photo-1546410531-bb4caa6b424d" class="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none">
+                            <img id="card-img" src="https://images.unsplash.com/photo-1546410531-bb4caa6b424d" onerror="handleImageError(this)" class="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none">
                             <div class="relative z-10 space-y-3">
                                 <h3 id="card-word" class="text-2xl font-extrabold tracking-wide drop-shadow-md">Kho trống</h3>
                                 <button onclick="event.stopPropagation(); speakWord(document.getElementById('card-word').innerText)" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-full text-xs font-semibold"><i class="fa-solid fa-volume-high mr-1"></i> Phát âm</button>
@@ -395,7 +402,14 @@
         let databaseRef = null;
         let isFirebaseUpdating = false;
 
+        const DEFAULT_FALLBACK_IMG = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d";
         const DEFAULT_DISTRACTORS = ["Trái táo", "Xin chào", "Cảm ơn", "Con chó", "Học tập", "Hạnh phúc", "Thái độ", "Kiên trì", "Thành công", "Sáng tạo"];
+
+        // Hàm xử lý khi ảnh lỗi đường dẫn
+        function handleImageError(imgEl) {
+            imgEl.onerror = null; 
+            imgEl.src = DEFAULT_FALLBACK_IMG;
+        }
 
         function speakWord(text) {
             if ('speechSynthesis' in window) {
@@ -410,7 +424,7 @@
         async function speakReverseTarget() {
             if (!currentQuizWord || !currentQuizWord.examples || currentQuizWord.examples.length === 0) return;
             let targetText = currentQuizSelectedSentence;
-            const containsVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổổơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(targetText);
+            const containsVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(targetText);
 
             if (containsVietnamese) {
                 try {
@@ -575,6 +589,19 @@
                 document.getElementById('res-vietnamese').innerText = data.vietnamese || 'Không có nghĩa';
                 document.getElementById('res-mnemonic').innerText = data.mnemonic || 'Đang cập nhật...';
 
+                // Xử lý và hiển thị hình ảnh từ API AI
+                const imgContainer = document.getElementById('res-img-container');
+                const imgPreview = document.getElementById('res-img-preview');
+                const imgUrl = data.image_url || data.image || `https://source.unsplash.com/featured/?${encodeURIComponent(wordInput)}`;
+                
+                if (imgUrl) {
+                    currentTranslationData.image_url = imgUrl;
+                    imgPreview.src = imgUrl;
+                    imgContainer.classList.remove('hidden');
+                } else {
+                    imgContainer.classList.add('hidden');
+                }
+
                 const examplesArray = data.examples || data.example || [];
                 const ul = document.getElementById('res-examples');
                 ul.innerHTML = '';
@@ -639,7 +666,7 @@
                 document.getElementById('card-back-title').innerText = 'Kho trống';
                 document.getElementById('card-vietnamese').innerText = 'Chưa có từ';
                 document.getElementById('card-mnemonic').innerText = '💡 Mẹo nhớ: Chưa có dữ liệu';
-                document.getElementById('card-img').src = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d";
+                document.getElementById('card-img').src = DEFAULT_FALLBACK_IMG;
                 document.getElementById('card-user-sentence').value = "";
                 return;
             }
@@ -650,12 +677,12 @@
             const card = displayCards[currentCardIndex];
             setTimeout(() => {
                 document.getElementById('card-word').innerText = card.word;
-                document.getElementById('card-img').src = card.image_url || "https://images.unsplash.com/photo-1546410531-bb4caa6b424d";
-                document.getElementById('card-back-title').innerText = `${card.word} (${card.type || ''}) [${card.deck || 'Mặc định'}]`;
+                document.getElementById('card-img').src = card.image_url || card.image || DEFAULT_FALLBACK_IMG;
+                document.getElementById('card-back-title').innerText = `${card.word} (${card.type || 'N/A'}) [${card.deck || 'Mặc định'}]`;
                 document.getElementById('card-vietnamese').innerText = card.vietnamese;
-                document.getElementById('card-mnemonic').innerText = `💡 Mẹo nhớ: ${card.mnemonic || 'Không có'}`;
+                document.getElementById('card-mnemonic').innerText = `💡 Mẹo nhớ: ${card.mnemonic || 'Không có mẹo nhớ'}`;
                 document.getElementById('card-user-sentence').value = card.user_sentence || "";
-            }, 150);
+            }, 200);
         }
 
         function saveUserSentence() {
@@ -664,15 +691,19 @@
             if (displayCards.length === 0) return;
             const card = displayCards[currentCardIndex];
             const originalIndex = flashcards.findIndex(c => c.word.toLowerCase() === card.word.toLowerCase());
+            
             if (originalIndex !== -1) {
-                flashcards[originalIndex].user_sentence = document.getElementById('card-user-sentence').value.trim();
+                const sentenceVal = document.getElementById('card-user-sentence').value.trim();
+                flashcards[originalIndex].user_sentence = sentenceVal;
                 saveLocalAndSyncCloud();
-                alert('Đã lưu câu ví dụ! ✍️');
+                alert('Đã lưu câu ví dụ thành công! ✍️');
             }
         }
 
         function toggleCardFlip() {
-            if (flashcards.length === 0) return;
+            const currentDeck = document.getElementById('global-deck-filter').value;
+            const displayCards = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
+            if (displayCards.length === 0) return;
             document.getElementById('card').classList.toggle('flipped');
         }
 
@@ -692,16 +723,20 @@
             updateFlashcardUI();
         }
 
-        // ================= LUYỆN TẬP =================
+        // ================= LUYỆN TẬP GAME =================
         function setQuizMode(mode) {
             subQuizMode = mode;
-            ['dictation', 'cloze', 'listening_reverse', 'word_matching'].forEach(m => {
+            const modes = ['dictation', 'cloze', 'listening_reverse', 'word_matching'];
+            modes.forEach(m => {
                 const btn = document.getElementById(`btn-mode-${m.replace('_', '-')}`);
-                btn.className = (m === mode) ? "px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition" : "px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 transition hover:bg-slate-200";
+                if (m === mode) {
+                    btn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition";
+                } else {
+                    btn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 transition hover:bg-slate-200";
+                }
                 const area = document.getElementById(`area-${m.replace('_', '-')}`);
                 if(area) area.classList.toggle('hidden', m !== mode);
             });
-
             document.getElementById('quiz-text-input-form').classList.toggle('hidden', mode === 'listening_reverse' || mode === 'word_matching');
             document.getElementById('quiz-multiple-choice-form').classList.toggle('hidden', mode !== 'listening_reverse');
             setupQuizGame();
@@ -710,15 +745,11 @@
         function setupQuizGame() {
             const currentDeck = document.getElementById('global-deck-filter').value;
             let pool = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
-            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') pool = pool.filter(c => c.examples && c.examples.length > 0);
-            
-            if(subQuizMode === 'word_matching' && pool.length < 3) {
-                document.getElementById('quiz-box-empty').classList.remove('hidden');
-                document.getElementById('quiz-box-active').classList.add('hidden');
-                return;
+            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') {
+                pool = pool.filter(c => (c.examples && c.examples.length > 0) || (c.example && c.example.length > 0));
             }
-
-            if (pool.length === 0) {
+            
+            if((subQuizMode === 'word_matching' && pool.length < 3) || pool.length === 0) {
                 document.getElementById('quiz-box-empty').classList.remove('hidden');
                 document.getElementById('quiz-box-active').classList.add('hidden');
             } else {
@@ -735,9 +766,12 @@
         function startNewQuiz() {
             const currentDeck = document.getElementById('global-deck-filter').value;
             let pool = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
-            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') pool = pool.filter(c => c.examples && c.examples.length > 0);
+            
+            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') {
+                pool = pool.filter(c => (c.examples && c.examples.length > 0) || (c.example && c.example.length > 0));
+            }
             if (pool.length === 0) return setupQuizGame();
-
+            
             document.getElementById('quiz-answer-input').value = '';
             document.getElementById('quiz-feedback').classList.add('hidden');
 
@@ -747,16 +781,24 @@
             }
 
             currentQuizWord = pool[Math.floor(Math.random() * pool.length)];
-            currentQuizSelectedSentence = (currentQuizWord.examples && currentQuizWord.examples.length > 0) ? currentQuizWord.examples[Math.floor(Math.random() * currentQuizWord.examples.length)] : "";
+            const exList = currentQuizWord.examples || currentQuizWord.example || [];
+            if (exList.length > 0) {
+                currentQuizSelectedSentence = exList[Math.floor(Math.random() * exList.length)];
+            } else {
+                currentQuizSelectedSentence = "";
+            }
 
             if (subQuizMode === 'dictation') {
                 speakWord(currentQuizWord.word);
             } else if (subQuizMode === 'cloze') {
-                document.getElementById('cloze-sentence').innerText = currentQuizSelectedSentence.replace(new RegExp(`\\b${escapeRegExp(currentQuizWord.word)}\\b`, 'gi'), "____");
-                document.getElementById('cloze-hint').innerText = `Nghĩa: ${currentQuizWord.vietnamese}`;
+                const rawSentence = currentQuizSelectedSentence;
+                const regex = new RegExp(`\\b${escapeRegExp(currentQuizWord.word)}\\b`, 'gi');
+                const blankSentence = rawSentence.replace(regex, "____");
+                document.getElementById('cloze-sentence').innerText = blankSentence;
+                document.getElementById('cloze-hint').innerText = `Nghĩa: ${currentQuizWord.vietnamese} (${currentQuizWord.type || 'N/A'})`;
             } else if (subQuizMode === 'listening_reverse') {
                 hasAnsweredQuiz = false;
-                document.getElementById('reverse-meaning-display').innerHTML = `<span class="text-sm font-medium text-gray-400 italic">(Bấm loa để nghe...)</span>`;
+                document.getElementById('reverse-meaning-display').innerHTML = `<span id="reverse-target-word-hint" class="text-sm font-medium text-gray-400 italic">(Bấm loa để nghe...)</span>`;
                 speakReverseTarget();
                 
                 let options = shuffleArray([currentQuizWord.vietnamese, ...pickHardDistractors(currentQuizWord, 3)]);
@@ -774,122 +816,140 @@
 
         function showQuizHint() {
             if(!currentQuizWord) return;
-            const fb = document.getElementById('quiz-feedback');
-            fb.className = "text-xs font-semibold text-amber-700 bg-amber-50 p-2 rounded-xl mt-2 text-center";
-            fb.innerText = `💡 Mẹo nhớ: ${currentQuizWord.mnemonic}`;
-            fb.classList.remove('hidden');
+            const feedback = document.getElementById('quiz-feedback');
+            feedback.className = "text-xs font-semibold text-amber-700 bg-amber-50 p-2 rounded-xl mt-2 text-center";
+            feedback.innerText = `💡 Gợi ý mẹo nhớ: ${currentQuizWord.mnemonic || 'Không có sẵn mẹo'}`;
+            feedback.classList.remove('hidden');
         }
 
         function checkQuizAnswer() {
             const userAns = document.getElementById('quiz-answer-input').value.trim().toLowerCase();
             const correctAns = currentQuizWord.word.trim().toLowerCase();
-            const fb = document.getElementById('quiz-feedback');
-            fb.className = "text-xs font-bold py-2 rounded-xl mt-2 text-center";
+            const feedback = document.getElementById('quiz-feedback');
+            feedback.className = "text-xs font-bold py-2 rounded-xl mt-2 text-center";
 
             if (userAns === correctAns) {
-                fb.innerText = "🎉 CHÍNH XÁC!";
-                fb.classList.add('bg-emerald-100', 'text-emerald-700');
+                feedback.innerText = "🎉 CHÍNH XÁC!";
+                feedback.classList.add('bg-emerald-100', 'text-emerald-700');
                 speakWord(currentQuizWord.word);
                 recordStudyActivity();
                 refreshDashboard();
-                setTimeout(() => { startNewQuiz(); }, 1200);
+                setTimeout(() => { startNewQuiz(); }, 1500);
             } else {
-                fb.innerText = `❌ Sai rồi! Đáp án: "${currentQuizWord.word}"`;
-                fb.classList.add('bg-rose-100', 'text-rose-700');
+                feedback.innerText = `❌ CHƯA ĐÚNG! Đáp án đúng: "${currentQuizWord.word}"`;
+                feedback.classList.add('bg-rose-100', 'text-rose-700');
             }
-            fb.classList.remove('hidden');
+            feedback.classList.remove('hidden');
         }
 
         function checkMultipleChoiceQuiz(selectedText, clickedBtn) {
             if (hasAnsweredQuiz) return; 
             hasAnsweredQuiz = true;
-
-            const fb = document.getElementById('quiz-feedback');
-            document.getElementById('reverse-meaning-display').innerHTML = `<span class="text-xs font-bold text-blue-600">${currentQuizSelectedSentence}</span>`;
-
-            for(let btn of document.getElementById('quiz-options-container').getElementsByTagName('button')) { 
+            const feedback = document.getElementById('quiz-feedback');
+            feedback.className = "text-xs font-bold p-2.5 rounded-xl mt-2 text-center block space-y-1";
+            
+            document.getElementById('reverse-meaning-display').innerHTML = `<h1 class="text-base font-extrabold text-blue-600 tracking-wide leading-relaxed">${currentQuizSelectedSentence}</h1>`;
+            const allButtons = document.getElementById('quiz-options-container').getElementsByTagName('button');
+            
+            for(let btn of allButtons) { 
                 btn.disabled = true; 
-                if (btn.innerText === currentQuizWord.vietnamese) btn.className = "w-full bg-emerald-50 text-emerald-700 font-bold py-2 px-3 border border-emerald-500 rounded-xl text-left text-xs";
+                if (btn.innerText === currentQuizWord.vietnamese) {
+                    btn.className = "w-full bg-emerald-50 text-emerald-700 font-bold py-2 px-3 border border-emerald-500 rounded-xl text-left text-xs shadow-sm";
+                } else if (btn.innerText === selectedText && selectedText !== currentQuizWord.vietnamese) {
+                    btn.className = "w-full bg-rose-50 text-rose-600 font-semibold py-2 px-3 border border-rose-400 rounded-xl text-left text-xs shadow-sm";
+                }
             }
 
             if (selectedText === currentQuizWord.vietnamese) {
-                fb.innerText = "🎉 CHUẨN XÁC!";
-                fb.className = "text-xs font-bold p-2 rounded-xl mt-2 text-center bg-emerald-100 text-emerald-700";
+                feedback.innerHTML = `<div>🎉 CHUẨN XÁC! Phản xạ rất tốt.</div>`;
+                feedback.className = "text-xs font-bold p-2 rounded-xl mt-2 text-center bg-emerald-100 text-emerald-700";
                 recordStudyActivity();
                 refreshDashboard();
-                setTimeout(() => { startNewQuiz(); }, 2000);
+                setTimeout(() => { startNewQuiz(); }, 2500); 
             } else {
-                fb.innerText = `❌ Đáp án đúng: "${currentQuizWord.vietnamese}"`;
-                fb.className = "text-xs font-bold p-2 rounded-xl mt-2 text-center bg-rose-100 text-rose-700";
-                setTimeout(() => { startNewQuiz(); }, 3000);
+                feedback.innerHTML = `<div>❌ CHƯA ĐÚNG! Nghĩa chính xác: "${currentQuizWord.vietnamese}".</div>`;
+                feedback.className = "text-xs font-bold p-2 rounded-xl mt-2 text-center bg-rose-100 text-rose-700";
+                setTimeout(() => { startNewQuiz(); }, 3500);
             }
-            fb.classList.remove('hidden');
+            feedback.classList.remove('hidden');
         }
 
         function generateWordMatchingGame(pool) {
-            const size = Math.min(pool.length, 4);
+            const size = Math.min(pool.length, 5);
             const selectedCards = shuffleArray(pool).slice(0, size);
-            selectedEnglishBtn = null; selectedVietnameseBtn = null;
+            
+            selectedEnglishBtn = null;
+            selectedVietnameseBtn = null;
             document.getElementById('quiz-feedback').classList.add('hidden');
 
+            const englishItems = selectedCards.map(c => ({ id: c.word, text: c.word }));
+            const vietnameseItems = selectedCards.map(c => ({ id: c.word, text: c.vietnamese }));
             const engContainer = document.getElementById('match-english-column');
             const vnContainer = document.getElementById('match-vietnamese-column');
-            engContainer.innerHTML = ''; vnContainer.innerHTML = '';
+            
+            engContainer.innerHTML = '';
+            vnContainer.innerHTML = '';
 
-            shuffleArray(selectedCards.map(c => ({ id: c.word, text: c.word }))).forEach(item => {
+            shuffleArray(englishItems).forEach(item => {
                 const btn = document.createElement('button');
-                btn.innerText = item.text; btn.dataset.id = item.id;
-                btn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
+                btn.innerText = item.text;
+                btn.dataset.id = item.id;
+                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
                 btn.onclick = () => handleMatchSelect(btn, 'eng');
                 engContainer.appendChild(btn);
             });
 
-            shuffleArray(selectedCards.map(c => ({ id: c.word, text: c.vietnamese }))).forEach(item => {
+            shuffleArray(vietnameseItems).forEach(item => {
                 const btn = document.createElement('button');
-                btn.innerText = item.text; btn.dataset.id = item.id;
-                btn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
+                btn.innerText = item.text;
+                btn.dataset.id = item.id;
+                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
                 btn.onclick = () => handleMatchSelect(btn, 'vn');
                 vnContainer.appendChild(btn);
             });
         }
 
         function handleMatchSelect(btn, columnType) {
-            if (btn.classList.contains('opacity-40')) return;
+            if (btn.classList.contains('bg-gray-100') || btn.classList.contains('opacity-40')) return;
             if (columnType === 'eng') {
-                if (selectedEnglishBtn) selectedEnglishBtn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
+                if (selectedEnglishBtn) selectedEnglishBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
                 selectedEnglishBtn = btn;
-                btn.className = "bg-blue-50 border border-blue-500 text-blue-700 font-bold py-1.5 px-2 rounded-lg text-xs text-center";
+                btn.className = "bg-blue-50 border-2 border-blue-500 text-blue-700 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center shadow-sm";
                 speakWord(btn.innerText);
             } else {
-                if (selectedVietnameseBtn) selectedVietnameseBtn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
+                if (selectedVietnameseBtn) selectedVietnameseBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
                 selectedVietnameseBtn = btn;
-                btn.className = "bg-emerald-50 border border-emerald-500 text-emerald-700 font-bold py-1.5 px-2 rounded-lg text-xs text-center";
+                btn.className = "bg-emerald-50 border-2 border-emerald-500 text-emerald-700 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center shadow-sm";
             }
 
             if (selectedEnglishBtn && selectedVietnameseBtn) {
                 if (selectedEnglishBtn.dataset.id === selectedVietnameseBtn.dataset.id) {
-                    selectedEnglishBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center opacity-40 pointer-events-none";
-                    selectedVietnameseBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center opacity-40 pointer-events-none";
-                    selectedEnglishBtn = null; selectedVietnameseBtn = null;
+                    selectedEnglishBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2.5 rounded-xl text-xs text-center opacity-40 pointer-events-none";
+                    selectedVietnameseBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2.5 rounded-xl text-xs text-center opacity-40 pointer-events-none";
+                    selectedEnglishBtn = null;
+                    selectedVietnameseBtn = null;
                     
-                    if (document.getElementById('match-english-column').querySelectorAll('button:not(.opacity-40)').length === 0) {
-                        const fb = document.getElementById('quiz-feedback');
-                        fb.className = "text-xs font-bold py-2 rounded-xl mt-2 text-center bg-emerald-100 text-emerald-700";
-                        fb.innerText = "🎉 HOÀN THÀNH TẤT CẢ CẶP TỪ!";
-                        fb.classList.remove('hidden');
+                    const remaining = document.getElementById('match-english-column').querySelectorAll('button:not(.opacity-40)');
+                    if (remaining.length === 0) {
+                        const feedback = document.getElementById('quiz-feedback');
+                        feedback.className = "text-xs font-bold py-2 rounded-xl mt-2 text-center bg-emerald-100 text-emerald-700";
+                        feedback.innerText = "🎉 TUYỆT VỜI! Đã hoàn thành tất cả các cặp từ!";
+                        feedback.classList.remove('hidden');
                         recordStudyActivity();
                         refreshDashboard();
-                        setTimeout(() => { startNewQuiz(); }, 1500);
+                        setTimeout(() => { startNewQuiz(); }, 2000);
                     }
                 } else {
-                    const b1 = selectedEnglishBtn, b2 = selectedVietnameseBtn;
-                    b1.className = "bg-rose-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center";
-                    b2.className = "bg-rose-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center";
-                    selectedEnglishBtn = null; selectedVietnameseBtn = null;
+                    const b1 = selectedEnglishBtn;
+                    const b2 = selectedVietnameseBtn;
+                    b1.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center";
+                    b2.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center";
+                    selectedEnglishBtn = null;
+                    selectedVietnameseBtn = null;
                     setTimeout(() => {
-                        if (!b1.classList.contains('opacity-40')) b1.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
-                        if (!b2.classList.contains('opacity-40')) b2.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
-                    }, 600);
+                        if (!b1.classList.contains('opacity-40')) b1.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
+                        if (!b2.classList.contains('opacity-40')) b2.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
+                    }, 800);
                 }
             }
         }
@@ -904,26 +964,37 @@
             let pool = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
 
             if (flashcards.length === 0) {
-                emptyBox.classList.remove('hidden'); lockedBox.classList.add('hidden'); activeBox.classList.add('hidden');
+                document.getElementById('review-empty-text').innerHTML = `Bạn cần ít nhất <strong class="text-blue-600">1 từ</strong>.`;
+                emptyBox.classList.remove('hidden');
+                lockedBox.classList.add('hidden');
+                activeBox.classList.add('hidden');
                 return;
             }
 
             const now = Date.now();
-            let dueWords = isTestMode ? pool : pool.filter(c => !c.nextReviewDate || now >= c.nextReviewDate);
-            let availableWords = dueWords.filter(c => !skippedWords.includes(c.word.toLowerCase()));
+            let dueWords = pool.filter(c => !c.nextReviewDate || now >= c.nextReviewDate);
+            if (isTestMode) dueWords = pool;
 
+            let availableWords = dueWords.filter(c => !skippedWords.includes(c.word.toLowerCase()));
             const batchLimitVal = document.getElementById('srs-batch-limit').value;
-            if (batchLimitVal !== 'all' && availableWords.length > parseInt(batchLimitVal)) {
-                availableWords = availableWords.slice(0, parseInt(batchLimitVal));
+            if (batchLimitVal !== 'all') {
+                const limitNum = parseInt(batchLimitVal);
+                if (availableWords.length > limitNum) availableWords = availableWords.slice(0, limitNum);
             }
 
             if (pool.length > 0 && dueWords.length === 0) {
-                lockedBox.classList.remove('hidden'); emptyBox.classList.add('hidden'); activeBox.classList.add('hidden');
-            } else if (availableWords.length === 0) {
-                document.getElementById('review-empty-text').innerHTML = `✨ Đã hoàn thành ôn tập nhóm này.`;
-                emptyBox.classList.remove('hidden'); lockedBox.classList.add('hidden'); activeBox.classList.add('hidden');
+                lockedBox.classList.remove('hidden');
+                emptyBox.classList.add('hidden');
+                activeBox.classList.add('hidden');
+            } else if (availableWords.length === 0 && pool.length > 0) {
+                document.getElementById('review-empty-text').innerHTML = `✨ Đã hoàn thành phiên ôn này.`;
+                emptyBox.classList.remove('hidden');
+                lockedBox.classList.add('hidden');
+                activeBox.classList.add('hidden');
             } else {
-                emptyBox.classList.add('hidden'); lockedBox.classList.add('hidden'); activeBox.classList.remove('hidden');
+                emptyBox.classList.add('hidden');
+                lockedBox.classList.add('hidden');
+                activeBox.classList.remove('hidden');
                 startReviewGame(availableWords);
             }
         }
@@ -938,7 +1009,13 @@
             document.getElementById('review-feedback').classList.add('hidden');
             
             const badge = document.getElementById('review-interval-badge');
-            badge.innerText = currentReviewWord.interval >= 15 ? `🏆 Thuộc lòng (${currentReviewWord.interval} ngày)` : `⏱️ Chu kỳ: ${currentReviewWord.interval} ngày`;
+            if(currentReviewWord.interval >= 15) {
+                badge.innerText = `🏆 Thuộc lòng (Lịch ôn: ${currentReviewWord.interval} ngày)`;
+                badge.className = "mt-2 text-[11px] bg-emerald-600 text-white px-2 py-0.5 rounded-full inline-block font-semibold";
+            } else {
+                badge.innerText = `⏱️ Chu kỳ: ${currentReviewWord.interval} ngày`;
+                badge.className = "mt-2 text-[11px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block font-semibold";
+            }
 
             let options = shuffleArray([currentReviewWord.vietnamese, ...pickHardDistractors(currentReviewWord, 3)]);
             const optionsContainer = document.getElementById('review-options');
@@ -953,25 +1030,31 @@
         }
 
         function selectReviewAnswer(selectedText, clickedBtn) {
-            const fb = document.getElementById('review-feedback');
-            fb.className = "text-center font-bold text-xs p-2.5 rounded-xl mt-3";
-            fb.classList.remove('hidden');
+            const feedback = document.getElementById('review-feedback');
+            feedback.className = "text-center font-bold text-xs p-2.5 rounded-xl mt-3";
+            feedback.classList.remove('hidden');
 
-            for(let btn of document.getElementById('review-options').getElementsByTagName('button')) btn.disabled = true;
+            const allButtons = document.getElementById('review-options').getElementsByTagName('button');
+            for(let btn of allButtons) { btn.disabled = true; }
 
             const isCorrect = (selectedText === currentReviewWord.vietnamese);
             if (isCorrect) {
                 currentReviewWord.repetition += 1;
-                currentReviewWord.interval = currentReviewWord.repetition === 1 ? 1 : (currentReviewWord.repetition === 2 ? 3 : Math.round(currentReviewWord.interval * currentReviewWord.efactor));
-                clickedBtn.className = "bg-emerald-500 text-white font-medium py-2.5 px-3 rounded-xl text-left text-xs";
-                fb.innerText = `👍 Đúng rồi! Lịch ôn: ${currentReviewWord.interval} ngày.`;
-                fb.classList.add('bg-emerald-100', 'text-emerald-800');
+                if (currentReviewWord.repetition === 1) currentReviewWord.interval = 1;
+                else if (currentReviewWord.repetition === 2) currentReviewWord.interval = 3;
+                else currentReviewWord.interval = Math.round(currentReviewWord.interval * currentReviewWord.efactor);
+                
+                currentReviewWord.efactor = Math.max(1.3, currentReviewWord.efactor + 0.1);
+                clickedBtn.className = "bg-emerald-500 text-white font-medium py-2.5 px-3 rounded-xl text-left text-xs border border-emerald-600 shadow-md";
+                feedback.innerText = `👍 Đúng! Lịch ôn tiếp theo: ${currentReviewWord.interval} ngày.`;
+                feedback.classList.add('bg-emerald-100', 'text-emerald-800');
             } else {
                 currentReviewWord.repetition = 0;
-                currentReviewWord.interval = 1;
-                clickedBtn.className = "bg-rose-500 text-white font-medium py-2.5 px-3 rounded-xl text-left text-xs";
-                fb.innerText = `❌ Sai! Đáp án: "${currentReviewWord.vietnamese}"`;
-                fb.classList.add('bg-rose-100', 'text-rose-800');
+                currentReviewWord.interval = 1; 
+                currentReviewWord.efactor = Math.max(1.3, currentReviewWord.efactor - 0.2);
+                clickedBtn.className = "bg-rose-500 text-white font-medium py-2.5 px-3 rounded-xl text-left text-xs border border-rose-600 shadow-md";
+                feedback.innerText = `❌ Sai rồi! Đáp án đúng: "${currentReviewWord.vietnamese}".`;
+                feedback.classList.add('bg-rose-100', 'text-rose-800');
             }
 
             currentReviewWord.nextReviewDate = Date.now() + (currentReviewWord.interval * 86400000);
@@ -979,7 +1062,7 @@
             saveLocalAndSyncCloud();
             updateFlashcardUI();
             refreshDashboard();
-            setTimeout(() => { setupReviewGame(); }, 1500);
+            setTimeout(() => { setupReviewGame(); }, 1800);
         }
 
         function skipReviewWord() {
@@ -988,15 +1071,119 @@
             setupReviewGame();
         }
 
-        // ================= QUẢN LÝ KHO TỪ =================
+        // ================= KHU VỰC ĐỒNG BỘ FIREBASE =================
+        function initFirebaseSync() {
+            const userId = document.getElementById('fb-user-id').value.trim();
+            const configRaw = document.getElementById('fb-config-json').value.trim();
+            
+            if(!userId || !configRaw) return alert('Vui lòng điền đủ ID người dùng và đoạn mã JSON Firebase Config!');
+
+            try {
+                const config = JSON.parse(configRaw);
+                if(!firebase.apps.length) firebase.initializeApp(config);
+                
+                databaseRef = firebase.database().ref('flashcards_users/' + userId);
+                document.getElementById('sync-status').innerText = 'ONLINE';
+                document.getElementById('sync-status').className = "bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
+                document.getElementById('display-username').innerText = userId;
+                document.getElementById('user-logged-badge').classList.remove('hidden');
+
+                // Lắng nghe biến động Realtime
+                databaseRef.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if(data && Array.isArray(data)) {
+                        isFirebaseUpdating = true;
+                        flashcards = data;
+                        localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                        refreshDashboard();
+                        updateFlashcardUI();
+                        isFirebaseUpdating = false;
+                    }
+                });
+
+                localStorage.setItem('fb_user_id', userId);
+                localStorage.setItem('fb_config_json', configRaw);
+                alert('Kết nối đồng bộ đám mây Firebase thành công! 🎉');
+            } catch(e) {
+                alert('Lỗi cấu hình Firebase JSON: ' + e.message);
+            }
+        }
+
+        function logoutFirebase() {
+            if(confirm('Bạn muốn ngắt kết nối đồng bộ Firebase trên thiết bị này?')) {
+                localStorage.removeItem('fb_user_id');
+                localStorage.removeItem('fb_config_json');
+                location.reload();
+            }
+        }
+
+        function autoLoadFirebaseConfig() {
+            const savedUid = localStorage.getItem('fb_user_id');
+            const savedCfg = localStorage.getItem('fb_config_json');
+            if(savedUid && savedCfg) {
+                document.getElementById('fb-user-id').value = savedUid;
+                document.getElementById('fb-config-json').value = savedCfg;
+                initFirebaseSync();
+            }
+        }
+
+        // ================= EXPORT / IMPORT =================
+        function exportData() {
+            if (flashcards.length === 0) return alert('Kho dữ liệu từ trống!');
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(flashcards, null, 2));
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", `flashcards_backup_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(dl);
+            dl.click(); dl.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.value || e.target.result);
+                    if (Array.isArray(imported)) {
+                        if (confirm(`Nhập ${imported.length} từ từ file JSON vào kho hiện tại?`)) {
+                            imported.forEach(newCard => {
+                                if(!flashcards.some(c => c.word.toLowerCase() === newCard.word.toLowerCase())) {
+                                    flashcards.push(newCard);
+                                }
+                            });
+                            saveLocalAndSyncCloud();
+                            refreshDashboard();
+                            updateFlashcardUI();
+                            alert('Nhập dữ liệu thành công! 🎉');
+                        }
+                    }
+                } catch (err) { alert('Lỗi đọc file JSON: ' + err.message); }
+            };
+            reader.readAsText(file);
+        }
+
+        function requestNotificationPermission() {
+            if (!("Notification" in window)) return alert("Trình duyệt không hỗ trợ Thông báo.");
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") alert("Đã bật thông báo ngắc ngứ nhắc nhở học từ!");
+            });
+        }
+
+        // ================= BẢNG QUẢN LÝ THỦ CÔNG =================
         function renderManagementTable() {
             const tbody = document.getElementById('management-table-body');
             const searchKeyword = document.getElementById('manage-search-input').value.trim().toLowerCase();
             tbody.innerHTML = '';
+            
+            const filtered = flashcards.filter(c => 
+                c.word.toLowerCase().includes(searchKeyword) || 
+                c.vietnamese.toLowerCase().includes(searchKeyword) ||
+                (c.deck || 'Mặc định').toLowerCase().includes(searchKeyword)
+            );
 
-            const filtered = flashcards.filter(c => c.word.toLowerCase().includes(searchKeyword) || c.vietnamese.toLowerCase().includes(searchKeyword));
             if(filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-slate-400">Không tìm thấy từ phù hợp.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-slate-400">Không tìm thấy từ nào phù hợp.</td></tr>`;
                 return;
             }
 
@@ -1005,137 +1192,47 @@
                 tr.className = "hover:bg-slate-50 transition";
                 tr.innerHTML = `
                     <td class="px-3 py-2 font-bold text-slate-800">${card.word}</td>
-                    <td class="px-3 py-2 italic text-slate-400">${card.type || 'N/A'}</td>
+                    <td class="px-3 py-2 text-[10px] italic text-slate-400">${card.type || 'N/A'}</td>
                     <td class="px-3 py-2"><span class="bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">${card.deck || 'Mặc định'}</span></td>
                     <td class="px-3 py-2">
-                        <input type="text" value="${card.vietnamese}" onchange="updateCardVn('${card.word}', this.value)" class="w-full bg-transparent border-b border-transparent focus:border-blue-500 text-emerald-600 focus:outline-none">
+                        <input type="text" value="${card.vietnamese}" 
+                            onchange="updateCardVietnameseDirectly('${card.word}', this.value)" 
+                            class="w-full bg-transparent hover:bg-white focus:bg-white border-b border-transparent focus:border-blue-500 px-1 py-0.5 font-medium text-emerald-600 focus:outline-none transition">
                     </td>
                     <td class="px-3 py-2 text-center">
-                        <button onclick="deleteCard('${card.word}')" class="text-rose-500 hover:text-rose-700 text-xs font-bold"><i class="fa-solid fa-trash-can"></i></button>
+                        <button onclick="deleteCardDirectly('${card.word}')" class="text-rose-500 hover:text-rose-700 px-2 py-0.5 rounded transition text-[10px] font-bold">
+                            <i class="fa-solid fa-trash-can mr-1"></i> Xóa
+                        </button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        function updateCardVn(word, val) {
+        function updateCardVietnameseDirectly(word, newVnValue) {
             const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
-            if (idx !== -1) { flashcards[idx].vietnamese = val.trim(); saveLocalAndSyncCloud(); refreshDashboard(); }
+            if (idx !== -1) {
+                flashcards[idx].vietnamese = newVnValue.trim();
+                saveLocalAndSyncCloud();
+                refreshDashboard();
+                updateFlashcardUI();
+            }
         }
 
-        function deleteCard(word) {
-            if (confirm(`Xóa từ "${word}"?`)) {
+        function deleteCardDirectly(word) {
+            if (confirm(`Xóa vĩnh viễn từ "${word}" khỏi kho?`)) {
                 flashcards = flashcards.filter(c => c.word.toLowerCase() !== word.toLowerCase());
-                saveLocalAndSyncCloud(); refreshDashboard(); updateFlashcardUI();
+                saveLocalAndSyncCloud();
+                currentCardIndex = 0;
+                refreshDashboard();
+                updateFlashcardUI();
             }
         }
 
-        function exportData() {
-            if (flashcards.length === 0) return alert('Trống!');
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(flashcards, null, 2));
-            const a = document.createElement('a'); a.href = dataStr; a.download = `flashcards.json`;
-            document.body.appendChild(a); a.click(); a.remove();
-        }
-
-        function importData(e) {
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    const imported = JSON.parse(evt.target.result);
-                    if (Array.isArray(imported)) {
-                        imported.forEach(i => { if(!flashcards.some(c => c.word.toLowerCase() === i.word.toLowerCase())) flashcards.push(i); });
-                        saveLocalAndSyncCloud(); refreshDashboard(); updateFlashcardUI(); alert('Thành công!');
-                    }
-                } catch(err) { alert('Lỗi file JSON'); }
-            };
-            reader.readAsText(e.target.files[0]);
-        }
-
-        // ================= THÔNG BÁO PUSH NOTIFICATION NGẪU NHIÊN 9H-22H =================
-        async function requestNotificationPermission() {
-            if (!("Notification" in window)) {
-                return alert("Trình duyệt của bạn không hỗ trợ thông báo đẩy!");
-            }
-            const permission = await Notification.requestPermission();
-            if (permission === "granted") {
-                alert("Đã bật thông báo thành công! Từ 9h sáng đến 10h tối, điện thoại sẽ thỉnh thoảng gửi thông báo câu đố từ vựng cho bạn.");
-                scheduleRandomNotifications();
-            } else {
-                alert("Bạn đã từ chối quyền nhận thông báo.");
-            }
-        }
-
-        function scheduleRandomNotifications() {
-            // Lưu trạng thái vào localStorage để Service Worker hoặc trang web biết
-            localStorage.setItem('enable_random_notifications', 'true');
-            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ type: 'START_NOTIFICATIONS', flashcards });
-            }
-        }
-
-        // ================= FIREBASE SYNC =================
-        function initFirebaseSync() {
-            const userId = document.getElementById('fb-user-id').value.trim();
-            let configRaw = document.getElementById('fb-config-json').value.trim();
-            if (!userId || !configRaw) return alert('Điền thiếu thông tin!');
-            if (!configRaw.startsWith('{')) configRaw = '{' + configRaw;
-            if (!configRaw.endsWith('}')) configRaw = configRaw + '}';
-
-            try {
-                const config = JSON.parse(configRaw);
-                if (firebase.apps.length === 0) firebase.initializeApp(config);
-                
-                document.getElementById('sync-status').innerText = "ĐANG KẾT NỐI...";
-                databaseRef = firebase.database().ref('users/' + userId + '/flashcards');
-
-                databaseRef.on('value', (snapshot) => {
-                    const cloudData = snapshot.val();
-                    if (cloudData && Array.isArray(cloudData)) {
-                        isFirebaseUpdating = true;
-                        flashcards = cloudData;
-                        localStorage.setItem('flashcards', JSON.stringify(flashcards));
-                        refreshDashboard(); updateFlashcardUI();
-                        isFirebaseUpdating = false;
-                    } else if (flashcards.length > 0) {
-                        databaseRef.set(flashcards);
-                    }
-                    document.getElementById('fb-login-panel').classList.add('hidden');
-                    document.getElementById('display-username').innerText = userId;
-                    document.getElementById('user-logged-badge').classList.remove('hidden');
-                    localStorage.setItem('fb_user_id', userId);
-                    localStorage.setItem('fb_config_json', configRaw);
-                });
-            } catch (err) { alert('Lỗi cấu hình Firebase JSON!'); }
-        }
-
-        function logoutFirebase() {
-            if (databaseRef) databaseRef.off();
-            localStorage.removeItem('fb_user_id'); localStorage.removeItem('fb_config_json');
-            document.getElementById('user-logged-badge').classList.add('hidden');
-            document.getElementById('fb-login-panel').classList.remove('hidden');
-            document.getElementById('sync-status').innerText = "OFFLINE";
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedId = localStorage.getItem('fb_user_id');
-            const savedConfig = localStorage.getItem('fb_config_json');
-            if (savedId && savedConfig) {
-                document.getElementById('fb-user-id').value = savedId;
-                document.getElementById('fb-config-json').value = savedConfig;
-                initFirebaseSync();
-            }
-        });
-
+        // Khởi tạo chạy ban đầu
         updateFlashcardUI();
         refreshDashboard();
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then(reg => {
-                    console.log('Service Worker đăng ký thành công');
-                });
-            });
-        }
+        autoLoadFirebaseConfig();
     </script>
 </body>
 </html>
