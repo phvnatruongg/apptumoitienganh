@@ -26,7 +26,7 @@
         }
         .flashcard.flipped { transform: rotateY(180deg); } 
         .front, .back {
-            position: absolute; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             backface-visibility: hidden; display: flex;
             flex-direction: column; align-items: center; justify-content: center;
             border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -36,8 +36,8 @@
 
         /* Kích thước nút đáp án chuẩn dễ bấm */
         .quiz-opt-btn {
-            min-height: 48px;
-            font-size: 13px;
+            min-height: 60px;
+            font-size: 16px !important;
             text-transform: lowercase !important;
             transition: all 0.2s ease;
         }
@@ -212,7 +212,7 @@
                     <span id="flashcard-count" class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Kho: 0 từ</span>
                 </div>
 
-                <!-- Khung Thẻ Cố Định Layout -->
+                <!-- Khung Thẻ Cố Định Layout Không Nhảy Trôi -->
                 <div class="flashcard-container w-full h-80 mb-3 select-none">
                     <div class="flashcard" id="card" onclick="toggleCardFlip()">
                         <!-- Mặt trước của Flashcard -->
@@ -220,7 +220,7 @@
                             <img id="card-img" src="https://images.unsplash.com/photo-1546410531-bb4caa6b424d" onerror="handleImageError(this)" class="absolute inset-0 w-full h-full object-cover opacity-45 pointer-events-none transition-opacity">
                             <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20"></div>
                             
-                            <div class="w-full"></div>
+                            <div class="w-full"></div> <!-- Spacer top -->
 
                             <div class="relative z-10 space-y-3 flex flex-col items-center my-auto">
                                 <h3 id="card-word" class="text-3xl font-extrabold tracking-wide text-white drop-shadow-md">Kho trống</h3>
@@ -276,14 +276,14 @@
 
             <div id="quiz-box-empty" class="space-y-3 py-8 text-center">
                 <i class="fa-solid fa-folder-open text-4xl text-slate-300"></i>
-                <p class="text-slate-600 text-sm">Cần thêm từ vựng vào kho Flashcard để chơi chế độ này.</p>
+                <p class="text-slate-600 text-sm">Cần thêm từ vựng kèm câu ví dụ vào kho Flashcard để chơi chế độ này.</p>
             </div>
 
             <div id="quiz-box-active" class="hidden space-y-4">
                 <div class="bg-slate-50 border border-slate-200 p-5 rounded-2xl text-center shadow-inner min-h-32 flex flex-col justify-center items-center">
                     
                     <div id="area-dictation" class="space-y-2 hidden">
-                        <button onclick="speakWord(currentQuizWord ? currentQuizWord.word : '')" class="bg-blue-600 hover:bg-blue-700 text-white w-12 h-12 rounded-full text-lg shadow-md transition animate-pulse">
+                        <button onclick="speakWord(currentQuizWord.word)" class="bg-blue-600 hover:bg-blue-700 text-white w-12 h-12 rounded-full text-lg shadow-md transition animate-pulse">
                             <i class="fa-solid fa-volume-high"></i>
                         </button>
                         <div class="text-[10px] text-slate-400 font-medium uppercase">Bấm để nghe âm thanh</div>
@@ -316,7 +316,7 @@
                 </div>
 
                 <div id="quiz-text-input-form" class="max-w-md mx-auto space-y-2">
-                    <input type="text" id="quiz-answer-input" onkeydown="if(event.key==='Enter') checkQuizAnswer()" placeholder="Nhập đáp án tiếng Anh..." class="w-full text-center px-4 py-2 text-base border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold">
+                    <input type="text" id="quiz-answer-input" placeholder="Nhập đáp án tiếng Anh..." class="w-full text-center px-4 py-2 text-base border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold">
                     <div class="flex gap-2">
                         <button onclick="checkQuizAnswer()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl text-sm font-bold shadow-sm transition">Nộp đáp án</button>
                         <button onclick="showQuizHint()" class="bg-amber-500 hover:bg-amber-600 text-white px-3 rounded-xl transition"><i class="fa-solid fa-lightbulb"></i></button>
@@ -325,7 +325,7 @@
 
                 <div id="quiz-multiple-choice-form" class="hidden max-w-md mx-auto">
                     <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">Chọn nghĩa tiếng Việt chính xác:</div>
-                    <div id="quiz-options-container" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+                    <div id="quiz-options-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
                 </div>
 
                 <div id="quiz-feedback" class="text-sm font-bold hidden py-2 rounded-xl text-center"></div>
@@ -361,7 +361,8 @@
 
                 <div>
                     <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 text-center">Chọn nghĩa đúng (6 lựa chọn):</div>
-                    <div id="review-options" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2"></div>
+                    <!-- Lưới 6 đáp án SRS in thường -->
+                    <div id="review-options" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
                 </div>
 
                 <div id="review-feedback" class="text-center font-bold text-sm p-2.5 rounded-xl hidden"></div>
@@ -426,7 +427,7 @@
         let isFirebaseUpdating = false;
 
         const DEFAULT_FALLBACK_IMG = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=600&auto=format&fit=crop&q=80";
-        
+        // Kho từ nhiễu phong phú 100% chữ in thường
         const DEFAULT_DISTRACTORS = [
             "bụng", "lửng mật", "trái táo", "xin chào", "cảm ơn", "con chó", 
             "học tập", "hạnh phúc", "thái độ", "kiên trì", "thành công", "sáng tạo",
@@ -434,6 +435,7 @@
             "bánh mì", "trường học", "công việc", "gia đình", "bạn bè", "thời tiết"
         ];
 
+        // Từ điển chuẩn ngữ cảnh thoát nghĩa (ví dụ: honey badger -> lửng mật)
         const DICTIONARY_OVERRIDE = {
             "honey badger": { meaning: "lửng mật", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "The honey badger is widely known for its fearlessness." },
             "honney badger": { meaning: "lửng mật", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "The honey badger is widely known for its fearlessness." },
@@ -449,7 +451,6 @@
         }
 
         function speakWord(text) {
-            if (!text) return;
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
@@ -495,6 +496,7 @@
             return a;
         }
 
+        // Lấy 5 đáp án gây nhiễu để tạo đủ 6 đáp án SRS
         function pickHardDistractors(reviewWord, count = 5) {
             const correctVN = reviewWord.vietnamese.toLowerCase().trim();
             const used = new Set([correctVN]);
@@ -608,6 +610,7 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
+        // HÀM TRA TỪ AI TỐI ƯU DỊCH TỰ NHIÊN (gọi backend /api/translate: Groq dịch nghĩa + Pixabay lấy ảnh minh họa)
         async function translateWord() {
             const rawInput = document.getElementById('word-input').value.trim();
             if (!rawInput) return alert('Hãy gõ từ cần tra!');
@@ -627,38 +630,43 @@
                 let vietnameseMeaning = "";
                 let wordType = "Noun";
                 let mnemonic = "";
-                let sampleExample = `I study the word '${cleanInput}' every day.`;
+                let examples = [`I study the word '${cleanInput}' every day.`];
+                let imageUrl = DEFAULT_FALLBACK_IMG;
 
                 if (DICTIONARY_OVERRIDE[cleanInput]) {
+                    // Từ điển ưu tiên nghĩa sát thực tế cho các trường hợp đặc biệt đã kiểm chứng thủ công
                     const item = DICTIONARY_OVERRIDE[cleanInput];
                     vietnameseMeaning = item.meaning;
                     wordType = item.type;
                     mnemonic = item.mnemonic;
-                    sampleExample = item.ex;
+                    examples = [item.ex];
                 } else {
-                    const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(cleanInput)}`);
+                    // Gọi backend AI thật: Groq sinh nghĩa/mẹo nhớ/ví dụ + Pixabay lấy ảnh minh họa
+                    const res = await fetch('/api/translate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ word: cleanInput })
+                    });
                     const data = await res.json();
+                    if (!res.ok || data.error) throw new Error(data.error || 'Không tra được từ này!');
 
-                    if (!data || !data[0] || !data[0][0]) throw new Error("Không tìm thấy kết quả!");
+                    vietnameseMeaning = (data.vietnamese || '').toLowerCase();
+                    wordType = data.type || wordType;
+                    mnemonic = data.mnemonic || `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${vietnameseMeaning}`;
+                    examples = (data.examples && data.examples.length > 0) ? data.examples : examples;
+                    if (data.image_url) imageUrl = data.image_url;
 
-                    vietnameseMeaning = data[0][0][0].toLowerCase();
-                    if (data[1] && data[1][0] && data[1][0][0]) {
-                        wordType = data[1][0][0];
-                    }
-
-                    mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${vietnameseMeaning}`;
+                    if (!vietnameseMeaning) throw new Error("Không tìm thấy nghĩa của từ này!");
                 }
-
-                const dynamicImgUrl = `https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=600&auto=format&fit=crop&q=80`;
 
                 currentTranslationData = {
                     word: cleanInput,
                     type: wordType,
                     vietnamese: vietnameseMeaning.toLowerCase(),
                     mnemonic: mnemonic,
-                    examples: [sampleExample],
-                    image_url: dynamicImgUrl,
-                    image: dynamicImgUrl
+                    examples: examples,
+                    image_url: imageUrl,
+                    image: imageUrl
                 };
 
                 document.getElementById('res-word').innerText = currentTranslationData.word;
@@ -667,7 +675,7 @@
                 document.getElementById('res-mnemonic').innerText = currentTranslationData.mnemonic;
 
                 const ul = document.getElementById('res-examples');
-                ul.innerHTML = `<li>${sampleExample}</li>`;
+                ul.innerHTML = examples.map(ex => `<li>${ex}</li>`).join('');
 
                 resBox.classList.remove('hidden');
                 addBtnWrapper.classList.remove('hidden');
@@ -692,7 +700,8 @@
                 return alert('Từ này đã có trong kho rồi!');
             }
             const deckName = document.getElementById('deck-input').value.trim() || 'Mặc định';
-            const wordImage = `https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=600&auto=format&fit=crop&q=80`;
+            // Giữ nguyên ảnh thật đã tra được từ backend (Pixabay), không ghi đè bằng nguồn ảnh khác
+            const wordImage = currentTranslationData.image_url || DEFAULT_FALLBACK_IMG;
 
             const newCard = { 
                 ...currentTranslationData, 
@@ -793,13 +802,13 @@
             subQuizMode = mode;
             const modes = ['dictation', 'cloze', 'listening_reverse', 'word_matching'];
             modes.forEach(m => {
-                const btn = document.getElementById(`btn-mode-${m.replace(/_/g, '-')}`);
+                const btn = document.getElementById(`btn-mode-${m.replace('_', '-')}`);
                 if (m === mode) {
                     btn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition";
                 } else {
                     btn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 transition hover:bg-slate-200";
                 }
-                const area = document.getElementById(`area-${m.replace(/_/g, '-')}`);
+                const area = document.getElementById(`area-${m.replace('_', '-')}`);
                 if(area) area.classList.toggle('hidden', m !== mode);
             });
             document.getElementById('quiz-text-input-form').classList.toggle('hidden', mode === 'listening_reverse' || mode === 'word_matching');
@@ -850,8 +859,6 @@
             let rawSelectedSentence = "";
             if (exList.length > 0) {
                 rawSelectedSentence = exList[Math.floor(Math.random() * exList.length)];
-            } else {
-                rawSelectedSentence = `I study the word '${currentQuizWord.word}' every day.`;
             }
 
             const parsedSentence = parseExampleSentence(rawSelectedSentence);
@@ -871,7 +878,8 @@
                 
                 speakReverseTarget();
                 
-                let options = shuffleArray([currentQuizWord.vietnamese.toLowerCase(), ...pickHardDistractors(currentQuizWord, 5)]);
+                // 4 Đáp án in thường (1 đúng + 3 nhiễu)
+                let options = shuffleArray([currentQuizWord.vietnamese.toLowerCase(), ...pickHardDistractors(currentQuizWord, 3)]);
                 const optContainer = document.getElementById('quiz-options-container');
                 optContainer.innerHTML = '';
                 options.forEach(opt => {
@@ -893,7 +901,6 @@
         }
 
         function checkQuizAnswer() {
-            if(!currentQuizWord) return;
             const userAns = document.getElementById('quiz-answer-input').value.trim().toLowerCase();
             const correctAns = currentQuizWord.word.trim().toLowerCase();
             const feedback = document.getElementById('quiz-feedback');
@@ -970,7 +977,7 @@
                 const btn = document.createElement('button');
                 btn.innerText = item.text;
                 btn.dataset.id = item.id;
-                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
+                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-3 px-3 rounded-xl text-sm transition text-center";
                 btn.onclick = () => handleMatchSelect(btn, 'eng');
                 engContainer.appendChild(btn);
             });
@@ -979,29 +986,29 @@
                 const btn = document.createElement('button');
                 btn.innerText = item.text;
                 btn.dataset.id = item.id;
-                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
+                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-3 px-3 rounded-xl text-sm transition text-center";
                 btn.onclick = () => handleMatchSelect(btn, 'vn');
                 vnContainer.appendChild(btn);
             });
         }
 
         function handleMatchSelect(btn, columnType) {
-            if (btn.classList.contains('opacity-40')) return;
+            if (btn.classList.contains('bg-gray-100') || btn.classList.contains('opacity-40')) return;
             if (columnType === 'eng') {
-                if (selectedEnglishBtn) selectedEnglishBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
+                if (selectedEnglishBtn) selectedEnglishBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-3 px-3 rounded-xl text-sm transition text-center";
                 selectedEnglishBtn = btn;
-                btn.className = "bg-blue-50 border-2 border-blue-500 text-blue-700 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center shadow-sm";
+                btn.className = "bg-blue-50 border-2 border-blue-500 text-blue-700 font-bold py-3 px-3 rounded-xl text-sm text-center shadow-sm";
                 speakWord(btn.innerText);
             } else {
-                if (selectedVietnameseBtn) selectedVietnameseBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
+                if (selectedVietnameseBtn) selectedVietnameseBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-3 px-3 rounded-xl text-sm transition text-center";
                 selectedVietnameseBtn = btn;
-                btn.className = "bg-emerald-50 border-2 border-emerald-500 text-emerald-700 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center shadow-sm";
+                btn.className = "bg-emerald-50 border-2 border-emerald-500 text-emerald-700 font-bold py-3 px-3 rounded-xl text-sm text-center shadow-sm";
             }
 
             if (selectedEnglishBtn && selectedVietnameseBtn) {
                 if (selectedEnglishBtn.dataset.id === selectedVietnameseBtn.dataset.id) {
-                    selectedEnglishBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2.5 rounded-xl text-xs text-center opacity-40 pointer-events-none";
-                    selectedVietnameseBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2.5 rounded-xl text-xs text-center opacity-40 pointer-events-none";
+                    selectedEnglishBtn.className = "bg-emerald-500 text-white font-bold py-3 px-3 rounded-xl text-sm text-center opacity-40 pointer-events-none";
+                    selectedVietnameseBtn.className = "bg-emerald-500 text-white font-bold py-3 px-3 rounded-xl text-sm text-center opacity-40 pointer-events-none";
                     selectedEnglishBtn = null;
                     selectedVietnameseBtn = null;
                     
@@ -1018,19 +1025,19 @@
                 } else {
                     const b1 = selectedEnglishBtn;
                     const b2 = selectedVietnameseBtn;
-                    b1.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center";
-                    b2.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-1.5 px-2.5 rounded-xl text-xs text-center";
+                    b1.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-3 px-3 rounded-xl text-sm text-center";
+                    b2.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-3 px-3 rounded-xl text-sm text-center";
                     selectedEnglishBtn = null;
                     selectedVietnameseBtn = null;
                     setTimeout(() => {
-                        if (!b1.classList.contains('opacity-40')) b1.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
-                        if (!b2.classList.contains('opacity-40')) b2.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-1.5 px-2.5 rounded-xl text-xs transition text-center";
+                        if (!b1.classList.contains('opacity-40')) b1.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-3 px-3 rounded-xl text-sm transition text-center";
+                        if (!b2.classList.contains('opacity-40')) b2.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-3 px-3 rounded-xl text-sm transition text-center";
                     }, 800);
                 }
             }
         }
 
-        // ================= THUẬT TOÁN SRS =================
+        // ================= THUẬT TOÁN SRS 6 ĐÁP ÁN =================
         function setupReviewGame() {
             const emptyBox = document.getElementById('review-box-empty');
             const lockedBox = document.getElementById('review-box-locked');
@@ -1093,6 +1100,7 @@
                 badge.className = "mt-2 text-[11px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block font-semibold";
             }
 
+            // Tạo đúng 6 đáp án SRS in thường
             let options = shuffleArray([currentReviewWord.vietnamese.toLowerCase(), ...pickHardDistractors(currentReviewWord, 5)]);
             const optionsContainer = document.getElementById('review-options');
             optionsContainer.innerHTML = '';
@@ -1315,7 +1323,7 @@
             }
         }
 
-        // Khởi tạo ứng dụng
+        // Khởi tạo chạy ban đầu
         updateFlashcardUI();
         refreshDashboard();
         autoLoadFirebaseConfig();
