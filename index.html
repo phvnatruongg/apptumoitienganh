@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI English Flashcards v3.0 Pro</title>
+    <title>AI English Flashcards v3.1 Pro</title>
     
-    <!-- CẤU HÌNH PWA: Nhúng file manifest.json để kích hoạt cài đặt app có icon -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,7 +14,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Nhúng Firebase SDK bản tương thích trực tiếp để chạy đồng bộ không cần build -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
@@ -23,14 +21,15 @@
         .flashcard-container { perspective: 1000px; }
         .flashcard {
             position: relative; width: 100%; height: 100%;
-            transform-style: preserve-3d; transition: transform 0.6s; cursor: pointer;
+            transform-style: preserve-3d; transition: transform 0.4s ease; cursor: pointer;
+            will-change: transform; /* Tối ưu phần cứng di động chống lag */
         }
         .flashcard.flipped { transform: rotateY(180deg); } 
         .front, .back {
             position: absolute; width: 100%; height: 100%;
             backface-visibility: hidden; display: flex;
             flex-direction: column; align-items: center; justify-content: center;
-            border-radius: 1rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .back { transform: rotateY(180deg); }
     </style>
@@ -38,74 +37,77 @@
 <body class="bg-slate-50 font-sans min-h-screen text-slate-800 pb-20">
 
     <!-- Header -->
-    <header class="bg-blue-600 text-white py-6 shadow-md text-center relative">
-        <!-- KHU VỰC THÔNG TIN TÀI KHOẢN KHI ĐÃ ĐĂNG NHẬP (GÓC TRÁI) -->
-        <div id="user-logged-badge" class="hidden absolute top-4 left-4 bg-blue-700/50 px-3 py-1.5 rounded-xl border border-blue-500 flex items-center gap-2 text-xs animate-fade-in">
+    <header class="bg-blue-600 text-white py-5 shadow-md text-center relative">
+        <div id="user-logged-badge" class="hidden absolute top-3 left-3 bg-blue-700/50 px-2.5 py-1 rounded-xl border border-blue-500 flex items-center gap-2 text-xs">
             <span class="font-bold text-emerald-300 flex items-center gap-1">
-                <i class="fa-solid fa-circle-user text-[10px] animate-pulse text-emerald-400"></i> 
+                <i class="fa-solid fa-circle-user text-[10px]"></i> 
                 <span id="display-username">...</span>
             </span>
             <span class="w-[1px] h-3 bg-blue-500"></span>
-            <button onclick="logoutFirebase()" class="text-blue-200 hover:text-rose-300 font-medium transition flex items-center gap-0.5" title="Đăng xuất / Đổi tài khoản khác">
-                <i class="fa-solid fa-right-from-bracket text-[10px]"></i> Đăng xuất
+            <button onclick="logoutFirebase()" class="text-blue-200 hover:text-rose-300 font-medium transition flex items-center gap-0.5">
+                <i class="fa-solid fa-right-from-bracket text-[10px]"></i> Thoát
             </button>
         </div>
 
-        <h1 class="text-3xl font-bold">🧠 AI English Flashcards v3.0 Pro</h1>
-        <p class="text-blue-100 mt-2 text-sm">Hệ Thống Lặp Lại Ngắt Quãng SRS & Siêu Luyện Tập Đa Phản Xạ</p>
+        <h1 class="text-2xl font-bold">🧠 AI English Flashcards</h1>
+        <p class="text-blue-100 mt-1 text-xs">SRS & Siêu Luyện Tập Đa Phản Xạ</p>
         
-        <!-- CHẾ ĐỘ TEST (GÓC PHẢI) -->
-        <div class="absolute top-4 right-4 bg-blue-700/50 px-3 py-1.5 rounded-xl border border-blue-500 flex items-center gap-2 text-xs">
-            <span class="font-medium text-blue-200">Chế độ Test (Bỏ qua ngày):</span>
-            <button id="test-mode-toggle" onclick="toggleTestMode()" class="bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">ON</button>
+        <div class="absolute top-3 right-3 bg-blue-700/50 px-2.5 py-1 rounded-xl border border-blue-500 flex items-center gap-1.5 text-xs">
+            <span class="font-medium text-blue-200">Test:</span>
+            <button id="test-mode-toggle" onclick="toggleTestMode()" class="bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px]">ON</button>
         </div>
     </header>
 
-    <!-- Xuất/Nhập Sao lưu dữ liệu nhanh -->
-    <div class="max-w-6xl mx-auto mt-4 px-4 flex justify-end gap-2 text-xs">
-        <button onclick="exportData()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1">
-            <i class="fa-solid fa-download"></i> Xuất dữ liệu (Backup JSON)
+    <!-- Xuất/Nhập & Đăng ký thông báo đẩy -->
+    <div class="max-w-6xl mx-auto mt-3 px-4 flex flex-wrap justify-between items-center gap-2 text-xs">
+        <button onclick="requestNotificationPermission()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-bell"></i> Bật thông báo ngẫu nhiên 9h-22h
         </button>
-        <button onclick="document.getElementById('import-file-input').click()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1">
-            <i class="fa-solid fa-upload"></i> Nhập dữ liệu
-        </button>
-        <input type="file" id="import-file-input" onchange="importData(event)" class="hidden" accept=".json">
+        <div class="flex gap-2">
+            <button onclick="exportData()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1">
+                <i class="fa-solid fa-download"></i> Backup JSON
+            </button>
+            <button onclick="document.getElementById('import-file-input').click()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1">
+                <i class="fa-solid fa-upload"></i> Nhập
+            </button>
+            <input type="file" id="import-file-input" onchange="importData(event)" class="hidden" accept=".json">
+        </div>
     </div>
 
     <!-- Dashboard Thống Kê -->
     <div class="max-w-6xl mx-auto mt-2 px-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
         <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-            <div class="text-xs text-slate-400 font-semibold uppercase">Tổng số từ</div>
-            <div id="dash-total" class="text-xl font-bold text-slate-700">0</div>
+            <div class="text-[10px] text-slate-400 font-semibold uppercase">Tổng số từ</div>
+            <div id="dash-total" class="text-lg font-bold text-slate-700">0</div>
         </div>
         <div class="bg-amber-50 p-3 rounded-xl shadow-sm border border-amber-100">
-            <div class="text-xs text-amber-600 font-semibold uppercase">Cần ôn hôm nay</div>
-            <div id="dash-due" class="text-xl font-bold text-amber-600">0</div>
+            <div class="text-[10px] text-amber-600 font-semibold uppercase">Cần ôn hôm nay</div>
+            <div id="dash-due" class="text-lg font-bold text-amber-600">0</div>
         </div>
         <div class="bg-emerald-50 p-3 rounded-xl shadow-sm border border-emerald-100">
-            <div class="text-xs text-emerald-600 font-semibold uppercase">Đã thuộc lòng</div>
-            <div id="dash-mastered" class="text-xl font-bold text-emerald-600">0</div>
+            <div class="text-[10px] text-emerald-600 font-semibold uppercase">Đã thuộc lòng</div>
+            <div id="dash-mastered" class="text-lg font-bold text-emerald-600">0</div>
         </div>
         <div class="bg-blue-50 p-3 rounded-xl shadow-sm border border-blue-100">
-            <div class="text-xs text-blue-600 font-semibold uppercase">Chuỗi ngày học</div>
-            <div id="dash-streak" class="text-xl font-bold text-blue-600">0 ngày</div>
+            <div class="text-[10px] text-blue-600 font-semibold uppercase">Chuỗi ngày học</div>
+            <div id="dash-streak" class="text-lg font-bold text-blue-600">0 ngày</div>
         </div>
     </div>
 
-    <!-- KHU VỰC CẤU HÌNH ĐỒNG BỘ CLOUD FIREBASE (SẼ ẨN KHI ĐÃ ĐĂNG NHẬP) -->
-    <div id="fb-login-panel" class="max-w-6xl mx-auto mt-4 px-4">
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+    <!-- KHU VỰC CẤU HÌNH FIREBASE -->
+    <div id="fb-login-panel" class="max-w-6xl mx-auto mt-3 px-4">
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">✍️ ID tài khoản cá nhân:</label>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">ID tài khoản cá nhân:</label>
                 <input type="text" id="fb-user-id" placeholder="Ví dụ: kuro_srs" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">⚙️ Firebase Config JSON:</label>
-                <input type="text" id="fb-config-json" placeholder="Dán đoạn mã có dấu { } vào đây..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Firebase Config JSON:</label>
+                <input type="text" id="fb-config-json" placeholder="Dán đoạn mã { } vào đây..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div class="flex gap-2">
                 <button onclick="initFirebaseSync()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-cloud-arrow-up"></i> Kết nối & Đồng bộ
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Kết nối
                 </button>
                 <span id="sync-status" class="bg-slate-100 text-slate-500 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap">OFFLINE</span>
             </div>
@@ -113,7 +115,7 @@
     </div>
 
     <!-- Bộ lọc Deck và Giới hạn Phiên Ôn -->
-    <div class="max-w-6xl mx-auto mt-4 px-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-center">
+    <div class="max-w-6xl mx-auto mt-3 px-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-center">
         <div class="flex items-center justify-center bg-white p-2 border rounded-xl shadow-sm">
             <label class="text-xs font-bold text-slate-500 uppercase mr-2">Bộ từ học:</label>
             <select id="global-deck-filter" onchange="filterDeckChanged()" class="px-3 py-1 bg-transparent text-sm focus:outline-none">
@@ -121,265 +123,250 @@
             </select>
         </div>
         <div class="flex items-center justify-center bg-white p-2 border rounded-xl shadow-sm">
-            <label class="text-xs font-bold text-slate-500 uppercase mr-2">Giới hạn phiên ôn (SRS):</label>
+            <label class="text-xs font-bold text-slate-500 uppercase mr-2">Giới hạn phiên ôn:</label>
             <select id="srs-batch-limit" onchange="setupReviewGame()" class="px-3 py-1 bg-transparent text-sm focus:outline-none font-semibold text-blue-600">
-                <option value="5">Cụm 5 từ / phiên học</option>
-                <option value="10" selected>Cụm 10 từ / phiên học</option>
-                <option value="15">Cụm 15 từ / phiên học</option>
-                <option value="all">Thả nổi toàn bộ (Không giới hạn)</option>
+                <option value="5">Cụm 5 từ</option>
+                <option value="10" selected>Cụm 10 từ</option>
+                <option value="15">Cụm 15 từ</option>
+                <option value="all">Toàn bộ</option>
             </select>
         </div>
     </div>
 
     <!-- Navigation Tabs -->
-    <div class="max-w-6xl mx-auto mt-4 px-4 flex flex-wrap justify-center gap-3">
-        <button onclick="switchTab('learn-tab')" id="btn-learn-tab" class="tab-btn bg-blue-600 text-white px-5 py-2.5 rounded-full font-medium shadow-sm transition-all duration-200">
-            <i class="fa-solid fa-language mr-2"></i>Tra Từ & Flashcard
+    <div class="max-w-6xl mx-auto mt-3 px-4 flex flex-wrap justify-center gap-2">
+        <button onclick="switchTab('learn-tab')" id="btn-learn-tab" class="tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition">
+            <i class="fa-solid fa-language mr-1.5"></i>Tra & Flashcard
         </button>
-        <button onclick="switchTab('quiz-tab')" id="btn-quiz-tab" class="tab-btn bg-slate-200 text-slate-700 px-5 py-2.5 rounded-full font-medium shadow-sm transition-all duration-200 hover:bg-slate-300">
-            <i class="fa-solid fa-gamepad mr-2"></i>Phòng Luyện Tập Đa Năng
+        <button onclick="switchTab('quiz-tab')" id="btn-quiz-tab" class="tab-btn bg-slate-200 text-slate-700 px-4 py-2 rounded-full text-sm font-medium shadow-sm transition hover:bg-slate-300">
+            <i class="fa-solid fa-gamepad mr-1.5"></i>Luyện Tập
         </button>
-        <button onclick="switchTab('review-tab')" id="btn-review-tab" class="tab-btn bg-slate-200 text-slate-700 px-5 py-2.5 rounded-full font-medium shadow-sm transition-all duration-200 hover:bg-slate-300">
-            <i class="fa-solid fa-graduation-cap mr-2"></i>Kiểm Tra Thuật Toán SRS
+        <button onclick="switchTab('review-tab')" id="btn-review-tab" class="tab-btn bg-slate-200 text-slate-700 px-4 py-2 rounded-full text-sm font-medium shadow-sm transition hover:bg-slate-300">
+            <i class="fa-solid fa-graduation-cap mr-1.5"></i>Thuật Toán SRS
         </button>
     </div>
 
-    <main class="max-w-6xl mx-auto mt-6 p-4">
+    <main class="max-w-6xl mx-auto mt-4 p-3">
         
         <!-- ================= TAB 1: TRA TỪ & FLASHCARD ================= -->
-        <div id="learn-tab" class="grid grid-cols-1 md:grid-cols-2 gap-6 transition-all duration-300">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h2 class="text-xl font-bold text-slate-700 mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-magnifying-glass text-blue-500"></i> Chế độ Dịch Cơ Bản
+        <div id="learn-tab" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-magnifying-glass text-blue-500"></i> Tra Từ AI
                 </h2>
-                <div class="flex gap-2 mb-4">
-                    <input type="text" id="word-input" placeholder="Nhập từ tiếng Anh..." class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
-                    <button onclick="translateWord()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition whitespace-nowrap">Tra từ</button>
+                <div class="flex gap-2 mb-3">
+                    <input type="text" id="word-input" placeholder="Nhập từ tiếng Anh..." class="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    <button onclick="translateWord()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition whitespace-nowrap">Tra từ</button>
                 </div>
 
-                <div class="mb-4">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Gắn chủ đề (Deck):</label>
-                    <input type="text" id="deck-input" placeholder="Ví dụ: Marketing, Tech, Từ vựng phim..." class="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="mb-3">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Gắn chủ đề (Deck):</label>
+                    <input type="text" id="deck-input" placeholder="Ví dụ: Marketing, Tech..." class="w-full px-3 py-1.5 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
-                <div id="result-box" class="hidden space-y-4 border-t pt-4">
+                <div id="result-box" class="hidden space-y-3 border-t pt-3">
                     <div class="flex items-center justify-between">
                         <div>
-                            <span id="res-word" class="text-2xl font-bold text-slate-800"></span>
-                            <span id="res-type" class="text-sm italic text-slate-500 ml-2"></span>
+                            <span id="res-word" class="text-xl font-bold text-slate-800"></span>
+                            <span id="res-type" class="text-xs italic text-slate-500 ml-2"></span>
                         </div>
-                        <button onclick="speakWord(document.getElementById('res-word').innerText)" class="text-blue-500 hover:text-blue-700 p-2 text-xl"><i class="fa-solid fa-volume-high"></i></button>
+                        <button onclick="speakWord(document.getElementById('res-word').innerText)" class="text-blue-500 hover:text-blue-700 p-2 text-lg"><i class="fa-solid fa-volume-high"></i></button>
                     </div>
-                    <div id="res-vietnamese" class="text-xl font-semibold text-emerald-600"></div>
-                    <div class="bg-amber-50 border border-amber-100 p-4 rounded-xl text-sm text-amber-800">
-                        <strong>💡 Mẹo nhớ từ:</strong> <span id="res-mnemonic"></span>
+                    <div id="res-vietnamese" class="text-lg font-semibold text-emerald-600"></div>
+                    <div class="bg-amber-50 border border-amber-100 p-3 rounded-xl text-xs text-amber-800">
+                        <strong>💡 Mẹo nhớ:</strong> <span id="res-mnemonic"></span>
                     </div>
                     <div class="space-y-1">
-                        <strong>📝 Ví dụ:</strong>
-                        <ul id="res-examples" class="list-disc pl-5 text-sm text-slate-600 space-y-1"></ul>
+                        <strong class="text-xs">📝 Ví dụ:</strong>
+                        <ul id="res-examples" class="list-disc pl-4 text-xs text-slate-600 space-y-1"></ul>
                     </div>
-                    <div class="flex gap-3 pt-2">
-                        <button onclick="saveCard()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-medium transition flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-plus"></i> Thêm vào học từ mới
-                        </button>
-                    </div>
+                    <button onclick="saveCard()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-medium transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Thêm vào học từ mới
+                    </button>
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
-                <div class="w-full flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fa-solid fa-box-archive text-emerald-500"></i> Chế độ Học Flashcard
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
+                <div class="w-full flex justify-between items-center mb-3">
+                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-box-archive text-emerald-500"></i> Học Flashcard
                     </h2>
-                    <span id="flashcard-count" class="bg-emerald-50 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full">Kho: 0 từ</span>
+                    <span id="flashcard-count" class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Kho: 0 từ</span>
                 </div>
 
-                <div class="flashcard-container w-full h-80 mb-4 select-none">
+                <div class="flashcard-container w-full h-72 mb-3 select-none">
                     <div class="flashcard" id="card" onclick="toggleCardFlip()">
-                        <div class="front bg-slate-900 text-white p-6 border border-slate-800 text-center overflow-hidden">
-                            <img id="card-img" src="https://images.unsplash.com/photo-1546410531-bb4caa6b424d" class="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none">
-                            <div class="relative z-10 space-y-4">
-                                <h3 id="card-word" class="text-3xl font-extrabold tracking-wide drop-shadow-md">Kho trống</h3>
-                                <button onclick="event.stopPropagation(); speakWord(document.getElementById('card-word').innerText)" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-sm"><i class="fa-solid fa-volume-high mr-1"></i> Phát âm</button>
+                        <div class="front bg-slate-900 text-white p-5 border border-slate-800 text-center overflow-hidden">
+                            <img id="card-img" src="https://images.unsplash.com/photo-1546410531-bb4caa6b424d" class="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none">
+                            <div class="relative z-10 space-y-3">
+                                <h3 id="card-word" class="text-2xl font-extrabold tracking-wide drop-shadow-md">Kho trống</h3>
+                                <button onclick="event.stopPropagation(); speakWord(document.getElementById('card-word').innerText)" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-full text-xs font-semibold"><i class="fa-solid fa-volume-high mr-1"></i> Phát âm</button>
                             </div>
-                            <div class="absolute bottom-3 text-[10px] text-slate-400/80 tracking-wider">
+                            <div class="absolute bottom-2 text-[9px] text-slate-400 tracking-wider">
                                 <i class="fa-solid fa-pointer mr-1"></i> BẤM ĐỂ XEM NGHĨA
                             </div>
                         </div>
-                        <div class="back bg-emerald-50 text-slate-800 p-4 border-2 border-emerald-500 text-center overflow-y-auto flex flex-col justify-center items-center">
-                            <span id="card-back-title" class="text-lg font-bold text-slate-900 mb-1">Kho trống</span>
-                            <span id="card-vietnamese" class="text-2xl font-extrabold text-emerald-600 mb-2">Chưa có từ</span>
-                            <p id="card-mnemonic" class="text-xs text-slate-600 bg-white p-2 rounded-xl border border-emerald-100 max-w-xs shadow-sm mb-2">💡 Mẹo nhớ: Chưa có dữ liệu</p>
+                        <div class="back bg-emerald-50 text-slate-800 p-3 border-2 border-emerald-500 text-center overflow-y-auto flex flex-col justify-center items-center">
+                            <span id="card-back-title" class="text-sm font-bold text-slate-900 mb-1">Kho trống</span>
+                            <span id="card-vietnamese" class="text-xl font-extrabold text-emerald-600 mb-1.5">Chưa có từ</span>
+                            <p id="card-mnemonic" class="text-[11px] text-slate-600 bg-white p-2 rounded-xl border border-emerald-100 max-w-xs shadow-sm mb-2">💡 Mẹo nhớ: Chưa có dữ liệu</p>
                             
                             <div class="w-full mt-1" onclick="event.stopPropagation()">
-                                <label class="block text-[10px] font-bold text-slate-500 uppercase text-left mb-0.5">✍️ Câu bạn tự đặt (Active Recall):</label>
+                                <label class="block text-[9px] font-bold text-slate-500 uppercase text-left mb-0.5">✍️ Câu tự đặt:</label>
                                 <div class="flex gap-1">
-                                    <input type="text" id="card-user-sentence" placeholder="Đặt câu của riêng bạn với từ này..." class="w-full text-xs px-2 py-1 border rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500">
-                                    <button onclick="saveUserSentence()" class="bg-emerald-600 text-white px-2 py-1 rounded-lg text-xs font-medium hover:bg-emerald-700 transition">Lưu</button>
+                                    <input type="text" id="card-user-sentence" placeholder="Đặt câu với từ này..." class="w-full text-xs px-2 py-1 border rounded-lg focus:outline-none">
+                                    <button onclick="saveUserSentence()" class="bg-emerald-600 text-white px-2 py-1 rounded-lg text-xs font-medium">Lưu</button>
                                 </div>
                             </div>
-                            <p class="text-[10px] text-slate-400 mt-2">Bấm để quay lại mặt trước</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex gap-4 mt-2 w-full">
-                    <button onclick="prevCard(); event.stopPropagation();" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-medium transition flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-backward"></i> Từ trước
+                <div class="flex gap-3 w-full">
+                    <button onclick="prevCard(); event.stopPropagation();" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-backward"></i> Trước
                     </button>
-                    <button onclick="nextCard(); event.stopPropagation();" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-medium transition flex items-center justify-center gap-2">
-                        Từ tiếp theo <i class="fa-solid fa-forward"></i>
+                    <button onclick="nextCard(); event.stopPropagation();" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        Tiếp <i class="fa-solid fa-forward"></i>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- ================= TAB 2: PHÒNG LUYỆN TẬP ĐA NĂNG ================= -->
-        <div id="quiz-tab" class="hidden max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-100 transition-all duration-300">
-            <div class="text-center mb-6">
-                <h2 class="text-2xl font-bold text-slate-800 mb-1">🎮 Phòng Luyện Tập Đa Năng</h2>
+        <!-- ================= TAB 2: LUYỆN TẬP ================= -->
+        <div id="quiz-tab" class="hidden max-w-2xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div class="text-center mb-5">
+                <h2 class="text-xl font-bold text-slate-800 mb-1">🎮 Phòng Luyện Tập</h2>
                 <div class="flex flex-wrap justify-center rounded-xl bg-slate-100 p-1 mt-2 gap-1">
-                    <button onclick="setQuizMode('dictation')" id="btn-mode-dictation" class="px-3 py-1.5 rounded-lg text-xs font-bold transition">Chép chính tả</button>
-                    <button onclick="setQuizMode('cloze')" id="btn-mode-cloze" class="px-3 py-1.5 rounded-lg text-xs font-bold transition">Điền từ ngữ cảnh</button>
-                    <button onclick="setQuizMode('listening_reverse')" id="btn-mode-listening-reverse" class="px-3 py-1.5 rounded-lg text-xs font-bold transition">Nghe hiểu ngược 🔁</button>
-                    <button onclick="setQuizMode('word_matching')" id="btn-mode-word-matching" class="px-3 py-1.5 rounded-lg text-xs font-bold transition">Trò chơi Nối Từ 🧩</button>
+                    <button onclick="setQuizMode('dictation')" id="btn-mode-dictation" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition">Chính tả</button>
+                    <button onclick="setQuizMode('cloze')" id="btn-mode-cloze" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition">Điền từ</button>
+                    <button onclick="setQuizMode('listening_reverse')" id="btn-mode-listening-reverse" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition">Nghe hiểu 🔁</button>
+                    <button onclick="setQuizMode('word_matching')" id="btn-mode-word-matching" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition">Nối từ 🧩</button>
                 </div>
             </div>
 
-            <div id="quiz-box-empty" class="space-y-4 py-10 text-center">
-                <i class="fa-solid fa-folder-open text-5xl text-slate-300"></i>
-                <p class="text-slate-600">Bạn cần thêm từ khóa phù hợp hoặc có câu ví dụ vào kho Flashcard để chơi chế độ này.</p>
+            <div id="quiz-box-empty" class="space-y-3 py-8 text-center">
+                <i class="fa-solid fa-folder-open text-4xl text-slate-300"></i>
+                <p class="text-slate-600 text-sm">Cần thêm từ vựng kèm câu ví dụ vào kho Flashcard để chơi chế độ này.</p>
             </div>
 
-            <div id="quiz-box-active" class="hidden space-y-6">
-                <div class="bg-slate-50 border border-slate-200 p-6 rounded-2xl text-center shadow-inner min-h-36 flex flex-col justify-center items-center">
+            <div id="quiz-box-active" class="hidden space-y-4">
+                <div class="bg-slate-50 border border-slate-200 p-5 rounded-2xl text-center shadow-inner min-h-32 flex flex-col justify-center items-center">
                     
-                    <!-- 1. Dictation -->
-                    <div id="area-dictation" class="space-y-3 hidden">
-                        <button onclick="speakWord(currentQuizWord.word)" class="bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full text-xl shadow-md transition transform active:scale-95 animate-pulse">
+                    <div id="area-dictation" class="space-y-2 hidden">
+                        <button onclick="speakWord(currentQuizWord.word)" class="bg-blue-600 hover:bg-blue-700 text-white w-12 h-12 rounded-full text-lg shadow-md transition animate-pulse">
                             <i class="fa-solid fa-volume-high"></i>
                         </button>
-                        <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">Bấm để nghe âm thanh từ vựng</div>
+                        <div class="text-[10px] text-slate-400 font-medium uppercase">Bấm để nghe âm thanh</div>
                     </div>
 
-                    <!-- 2. Cloze Test -->
-                    <div id="area-cloze" class="hidden space-y-2">
-                        <div id="cloze-sentence" class="text-lg font-bold text-slate-700 italic px-2"></div>
+                    <div id="area-cloze" class="hidden space-y-1">
+                        <div id="cloze-sentence" class="text-base font-bold text-slate-700 italic px-2"></div>
                         <div id="cloze-hint" class="text-xs text-emerald-600 font-semibold"></div>
                     </div>
 
-                    <!-- 3. Listening Reverse -->
-                    <div id="area-listening-reverse" class="hidden w-full space-y-4">
-                        <div class="flex flex-col items-center gap-2">
-                            <button id="btn-play-listening-reverse" onclick="speakReverseTarget()" class="bg-emerald-600 hover:bg-emerald-700 text-white w-14 h-14 rounded-full text-xl shadow-md transition transform active:scale-95">
+                    <div id="area-listening-reverse" class="hidden w-full space-y-3">
+                        <div class="flex flex-col items-center gap-1.5">
+                            <button id="btn-play-listening-reverse" onclick="speakReverseTarget()" class="bg-emerald-600 hover:bg-emerald-700 text-white w-12 h-12 rounded-full text-lg shadow-md transition">
                                 <i class="fa-solid fa-comment-dots"></i>
                             </button>
-                            <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">Bấm nút để nghe câu tiếng Anh ví dụ</div>
+                            <div class="text-[10px] text-slate-400 font-medium uppercase">Bấm loa nghe câu ví dụ</div>
                         </div>
-                        
-                        <!-- Box hiển thị nội dung câu hỏi -->
-                        <div id="reverse-meaning-display" class="bg-gradient-to-b from-slate-50 to-blue-50/30 border border-slate-200 p-5 rounded-2xl shadow-sm text-center min-h-[70px] flex items-center justify-center my-2">
-                            <span id="reverse-target-word-hint" class="text-xl font-medium text-gray-400 italic">
-                                (Bấm loa để nghe câu hỏi...)
-                            </span>
+                        <div id="reverse-meaning-display" class="bg-gradient-to-b from-slate-50 to-blue-50/30 border border-slate-200 p-4 rounded-xl shadow-sm text-center min-h-[60px] flex items-center justify-center my-1">
+                            <span id="reverse-target-word-hint" class="text-sm font-medium text-gray-400 italic">(Bấm loa để nghe...)</span>
                         </div>
-                        <div class="text-xs font-semibold text-slate-500 italic text-center">"Hãy tập trung nghe câu ví dụ ở trên và chọn nghĩa tiếng Việt đúng nhất ở dưới!"</div>
                     </div>
 
-                    <!-- 4. Word Matching -->
-                    <div id="area-word-matching" class="hidden w-full space-y-4">
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Nối cặp Tiếng Anh và Tiếng Việt tương ứng</p>
-                        <div class="grid grid-cols-2 gap-4">
+                    <div id="area-word-matching" class="hidden w-full space-y-3">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nối cặp Tiếng Anh và Tiếng Việt</p>
+                        <div class="grid grid-cols-2 gap-3">
                             <div id="match-english-column" class="flex flex-col gap-2"></div>
                             <div id="match-vietnamese-column" class="flex flex-col gap-2"></div>
                         </div>
                     </div>
                 </div>
 
-                <div id="quiz-text-input-form" class="max-w-md mx-auto space-y-3">
-                    <input type="text" id="quiz-answer-input" placeholder="Nhập đáp án tiếng Anh chính xác..." class="w-full text-center px-4 py-2.5 text-lg border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold tracking-wide">
+                <div id="quiz-text-input-form" class="max-w-md mx-auto space-y-2">
+                    <input type="text" id="quiz-answer-input" placeholder="Nhập đáp án tiếng Anh..." class="w-full text-center px-4 py-2 text-base border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold">
                     <div class="flex gap-2">
-                        <button onclick="checkQuizAnswer()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold shadow-sm transition">Nộp câu trả lời</button>
-                        <button onclick="showQuizHint()" class="bg-amber-500 hover:bg-amber-600 text-white px-4 rounded-xl font-bold transition"><i class="fa-solid fa-lightbulb"></i></button>
+                        <button onclick="checkQuizAnswer()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl text-sm font-bold shadow-sm transition">Nộp đáp án</button>
+                        <button onclick="showQuizHint()" class="bg-amber-500 hover:bg-amber-600 text-white px-3 rounded-xl transition"><i class="fa-solid fa-lightbulb"></i></button>
                     </div>
                 </div>
 
-                <!-- Giao diện trắc nghiệm của Nghe Ngược nằm bên dưới phần hiển thị nghĩa -->
                 <div id="quiz-multiple-choice-form" class="hidden max-w-md mx-auto">
-                    <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">Chọn nghĩa tiếng Việt chính xác của từ vựng trong câu:</div>
+                    <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">Chọn nghĩa tiếng Việt chính xác:</div>
                     <div id="quiz-options-container" class="grid grid-cols-1 gap-2"></div>
                 </div>
 
-                <div id="quiz-feedback" class="text-base font-bold hidden py-2 rounded-xl text-center"></div>
+                <div id="quiz-feedback" class="text-sm font-bold hidden py-2 rounded-xl text-center"></div>
                 
                 <div class="text-center">
-                    <button onclick="startNewQuiz()" class="text-sm text-blue-600 hover:underline font-medium"><i class="fa-solid fa-arrows-rotate mr-1"></i> Bỏ qua / Đổi câu khác</button>
+                    <button onclick="startNewQuiz()" class="text-xs text-blue-600 hover:underline font-medium"><i class="fa-solid fa-arrows-rotate mr-1"></i> Bỏ qua / Đổi câu khác</button>
                 </div>
             </div>
         </div>
 
         <!-- ================= TAB 3: SRS ================= -->
-        <div id="review-tab" class="hidden max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-100 transition-all duration-300">
-            <div class="text-center mb-6">
-                <h2 class="text-2xl font-bold text-slate-800">📊 Đánh Giá Trí Nhớ Thuật Toán SRS</h2>
-                <p class="text-slate-500 text-sm mt-1">Học thuật toán <strong class="text-blue-600">SM-2 Anki</strong>: Trả lời đúng giãn ngày, trả lời sai học lại lập tức!</p>
+        <div id="review-tab" class="hidden max-w-2xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div class="text-center mb-5">
+                <h2 class="text-xl font-bold text-slate-800">📊 Thuật Toán SRS</h2>
+                <p class="text-slate-500 text-xs mt-1">Học thuật toán <strong class="text-blue-600">SM-2 Anki</strong></p>
             </div>
 
-            <div id="review-box-locked" class="hidden space-y-4 py-10 text-center">
-                <i class="fa-solid fa-calendar-check text-5xl text-emerald-500 animate-bounce"></i>
-                <p class="text-slate-700 font-medium text-lg">Tuyệt vời! Bạn không còn từ nào cần ôn trong cụm/phiên này.</p>
-                <p class="text-slate-400 text-sm">Toàn bộ kho từ của bạn đã được sắp xếp lịch ôn khoa học.</p>
+            <div id="review-box-locked" class="hidden space-y-3 py-8 text-center">
+                <i class="fa-solid fa-calendar-check text-4xl text-emerald-500 animate-bounce"></i>
+                <p class="text-slate-700 font-medium text-base">Tuyệt vời! Không còn từ nào cần ôn trong phiên này.</p>
             </div>
 
-            <div id="review-box-empty" class="space-y-4 py-10 text-center">
-                <i class="fa-solid fa-circle-check text-5xl text-slate-300"></i>
-                <p class="text-slate-600" id="review-empty-text">Bạn cần ít nhất <strong class="text-blue-600">1 từ</strong> để bắt đầu bộ lọc.</p>
+            <div id="review-box-empty" class="space-y-3 py-8 text-center">
+                <i class="fa-solid fa-circle-check text-4xl text-slate-300"></i>
+                <p class="text-slate-600 text-sm" id="review-empty-text">Bạn cần ít nhất <strong class="text-blue-600">1 từ</strong>.</p>
             </div>
 
-            <div id="review-box-active" class="hidden space-y-6">
-                <div class="bg-slate-900 text-white p-8 rounded-2xl text-center shadow-md relative">
-                    <div id="review-word" class="text-4xl font-black tracking-wide text-amber-400">Word</div>
-                    <div id="review-interval-badge" class="mt-2 text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full inline-block font-semibold"></div>
+            <div id="review-box-active" class="hidden space-y-4">
+                <div class="bg-slate-900 text-white p-6 rounded-2xl text-center shadow-md">
+                    <div id="review-word" class="text-3xl font-black tracking-wide text-amber-400">Word</div>
+                    <div id="review-interval-badge" class="mt-2 text-[11px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block font-semibold"></div>
                 </div>
 
                 <div>
-                    <div class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">Chọn nghĩa đúng:</div>
-                    <div id="review-options" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 text-center">Chọn nghĩa đúng:</div>
+                    <div id="review-options" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
                 </div>
 
-                <div id="review-feedback" class="text-center font-bold text-lg p-3 rounded-xl hidden"></div>
+                <div id="review-feedback" class="text-center font-bold text-sm p-2.5 rounded-xl hidden"></div>
                 
                 <div class="text-center">
-                    <button onclick="skipReviewWord()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold px-4 py-2 rounded-xl transition flex items-center gap-1 mx-auto">
-                        <i class="fa-solid fa-forward-step"></i> Tạm bỏ qua từ này (Ôn sau)
+                    <button onclick="skipReviewWord()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold px-3 py-1.5 rounded-xl transition">
+                        <i class="fa-solid fa-forward-step mr-1"></i> Tạm bỏ qua từ này
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- ================= QUẢN LÝ KHO TỪ THỦ CÔNG ================= -->
-        <section class="max-w-6xl mx-auto mt-12 p-6 bg-white rounded-2xl shadow-sm border border-slate-100">
-            <div class="md:flex justify-between items-center mb-4">
+        <!-- ================= QUẢN LÝ KHO TỪ ================= -->
+        <section class="max-w-6xl mx-auto mt-8 p-5 bg-white rounded-2xl shadow-sm border border-slate-100">
+            <div class="md:flex justify-between items-center mb-3">
                 <div>
-                    <h2 class="text-xl font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fa-solid fa-sliders text-indigo-500"></i> Quản lý & Chỉnh sửa kho từ thủ công
+                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-indigo-500"></i> Quản lý kho từ thủ công
                     </h2>
-                    <p class="text-xs text-slate-400">Tìm kiếm nhanh, sửa chữa nghĩa sai hoặc xóa hẳn các từ nhập nhầm lẫn.</p>
                 </div>
                 <div class="mt-2 md:mt-0">
-                    <input type="text" id="manage-search-input" oninput="renderManagementTable()" placeholder="🔍 Tìm kiếm từ hoặc nghĩa..." class="px-3 py-1.5 border text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
+                    <input type="text" id="manage-search-input" oninput="renderManagementTable()" placeholder="🔍 Tìm kiếm từ hoặc nghĩa..." class="px-3 py-1.5 border text-xs rounded-xl focus:outline-none w-60">
                 </div>
             </div>
 
-            <div class="overflow-x-auto max-h-96 border rounded-xl shadow-inner">
-                <table class="w-full text-sm text-left text-slate-500">
-                    <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0">
+            <div class="overflow-x-auto max-h-80 border rounded-xl shadow-inner">
+                <table class="w-full text-xs text-left text-slate-500">
+                    <thead class="text-[10px] text-slate-700 uppercase bg-slate-100 sticky top-0">
                         <tr>
-                            <th class="px-4 py-3">Từ vựng</th>
-                            <th class="px-4 py-3">Loại từ</th>
-                            <th class="px-4 py-3">Chủ đề (Deck)</th>
-                            <th class="px-4 py-3">Nghĩa Tiếng Việt (Bấm để sửa)</th>
-                            <th class="px-4 py-3 text-center">Hành động</th>
+                            <th class="px-3 py-2.5">Từ vựng</th>
+                            <th class="px-3 py-2.5">Loại</th>
+                            <th class="px-3 py-2.5">Chủ đề</th>
+                            <th class="px-3 py-2.5">Nghĩa Tiếng Việt</th>
+                            <th class="px-3 py-2.5 text-center">Hành động</th>
                         </tr>
                     </thead>
                     <tbody id="management-table-body" class="divide-y divide-slate-100"></tbody>
@@ -405,7 +392,6 @@
         let selectedEnglishBtn = null;
         let selectedVietnameseBtn = null;
 
-        // Biến toàn cục phục vụ kết nối Firebase Realtime Database
         let databaseRef = null;
         let isFirebaseUpdating = false;
 
@@ -424,7 +410,6 @@
         async function speakReverseTarget() {
             if (!currentQuizWord || !currentQuizWord.examples || currentQuizWord.examples.length === 0) return;
             let targetText = currentQuizSelectedSentence;
-
             const containsVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổổơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(targetText);
 
             if (containsVietnamese) {
@@ -435,9 +420,7 @@
                         targetText = json[0][0][0];
                         currentQuizSelectedSentence = targetText; 
                     }
-                } catch(e) {
-                    console.error("Lỗi khi cố gắng tự dịch nóng cứu dữ liệu: ", e);
-                }
+                } catch(e) { console.error(e); }
             }
             speakWord(targetText);
         }
@@ -465,20 +448,16 @@
             const correctVN = reviewWord.vietnamese;
             const used = new Set([correctVN.toLowerCase()]);
             const picked = [];
-
             const userCards = shuffleArray(flashcards.filter(c => c.word.toLowerCase() !== reviewWord.word.toLowerCase()));
-            
             const cat = normalizeWordType(reviewWord.type);
+
             for (const c of userCards) {
-                if (normalizeWordType(c.type) === cat) {
-                    if (!used.has(c.vietnamese.toLowerCase())) {
-                        used.add(c.vietnamese.toLowerCase());
-                        picked.push(c.vietnamese);
-                    }
+                if (normalizeWordType(c.type) === cat && !used.has(c.vietnamese.toLowerCase())) {
+                    used.add(c.vietnamese.toLowerCase());
+                    picked.push(c.vietnamese);
                 }
                 if (picked.length >= count) break;
             }
-
             if (picked.length < count) {
                 for (const c of userCards) {
                     if (!used.has(c.vietnamese.toLowerCase())) {
@@ -488,10 +467,8 @@
                     if (picked.length >= count) break;
                 }
             }
-
             if (picked.length < count) {
-                const safetyBackup = shuffleArray(DEFAULT_DISTRACTORS);
-                for (const w of safetyBackup) {
+                for (const w of shuffleArray(DEFAULT_DISTRACTORS)) {
                     if (!used.has(w.toLowerCase())) {
                         used.add(w.toLowerCase());
                         picked.push(w);
@@ -506,11 +483,9 @@
             const todayStr = new Date().toDateString();
             const lastStudyDate = localStorage.getItem('last_study_date');
             if (lastStudyDate === todayStr) return;
-
             const yesterdayStr = new Date(Date.now() - 86400000).toDateString();
             const prevStreak = parseInt(localStorage.getItem('study_streak') || '0');
             const newStreak = (lastStudyDate === yesterdayStr) ? prevStreak + 1 : 1;
-
             localStorage.setItem('study_streak', newStreak);
             localStorage.setItem('last_study_date', todayStr);
         }
@@ -518,44 +493,29 @@
         function refreshDashboard() {
             const now = Date.now();
             const selectedDeck = document.getElementById('global-deck-filter').value;
-            
-            let filtered = flashcards;
-            if(selectedDeck !== 'all') {
-                filtered = flashcards.filter(c => (c.deck || 'Mặc định') === selectedDeck);
-            }
+            let filtered = selectedDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === selectedDeck);
 
-            const total = filtered.length;
-            const mastered = filtered.filter(c => (c.interval || 0) >= 15).length;
-            const due = filtered.filter(c => {
-                if (!c.nextReviewDate) return true;
-                return now >= c.nextReviewDate;
-            }).length;
-
-            document.getElementById('dash-total').innerText = total;
-            document.getElementById('dash-mastered').innerText = mastered;
-            document.getElementById('dash-due').innerText = isTestMode ? total : due;
+            document.getElementById('dash-total').innerText = filtered.length;
+            document.getElementById('dash-mastered').innerText = filtered.filter(c => (c.interval || 0) >= 15).length;
+            document.getElementById('dash-due').innerText = isTestMode ? filtered.length : filtered.filter(c => !c.nextReviewDate || now >= c.nextReviewDate).length;
 
             let streak = parseInt(localStorage.getItem('study_streak') || '0');
             const lastStudyDate = localStorage.getItem('last_study_date');
             const todayStr = new Date().toDateString();
-            if (lastStudyDate && lastStudyDate !== todayStr) {
-                const yesterdayStr = new Date(Date.now() - 86400000).toDateString();
-                if (lastStudyDate !== yesterdayStr) streak = 0;
+            if (lastStudyDate && lastStudyDate !== todayStr && lastStudyDate !== new Date(Date.now() - 86400000).toDateString()) {
+                streak = 0;
             }
             document.getElementById('dash-streak').innerText = `${streak} ngày`;
 
             const deckSelect = document.getElementById('global-deck-filter');
             const currentVal = deckSelect.value;
             deckSelect.innerHTML = '<option value="all">-- Tất cả chủ đề --</option>';
-            const uniqueDecks = [...new Set(flashcards.map(c => c.deck || 'Mặc định'))];
-            uniqueDecks.forEach(d => {
+            [...new Set(flashcards.map(c => c.deck || 'Mặc định'))].forEach(d => {
                 const opt = document.createElement('option');
-                opt.value = d;
-                opt.innerText = d;
+                opt.value = d; opt.innerText = d;
                 deckSelect.appendChild(opt);
             });
             deckSelect.value = currentVal;
-            
             renderManagementTable();
         }
 
@@ -568,15 +528,13 @@
         }
 
         document.getElementById('test-mode-toggle').innerText = isTestMode ? 'ON' : 'OFF';
-        document.getElementById('test-mode-toggle').className = isTestMode 
-            ? "bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase" 
-            : "bg-rose-500 text-white px-2 py-0.5 rounded font-bold uppercase";
+        document.getElementById('test-mode-toggle').className = isTestMode ? "bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px]" : "bg-rose-500 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px]";
 
         function toggleTestMode() {
             isTestMode = !isTestMode;
             localStorage.setItem('test_mode', JSON.stringify(isTestMode));
             document.getElementById('test-mode-toggle').innerText = isTestMode ? 'ON' : 'OFF';
-            document.getElementById('test-mode-toggle').className = isTestMode ? "bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase" : "bg-rose-500 text-white px-2 py-0.5 rounded font-bold uppercase";
+            document.getElementById('test-mode-toggle').className = isTestMode ? "bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px]" : "bg-rose-500 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px]";
             refreshDashboard();
             if(!document.getElementById('review-tab').classList.contains('hidden')) setupReviewGame();
         }
@@ -591,9 +549,9 @@
             if (tabId === 'review-tab') setupReviewGame();
             
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.className = "tab-btn bg-slate-200 text-slate-700 px-5 py-2.5 rounded-full font-medium shadow-sm transition-all duration-200 hover:bg-slate-300";
+                btn.className = "tab-btn bg-slate-200 text-slate-700 px-4 py-2 rounded-full text-sm font-medium shadow-sm transition hover:bg-slate-300";
             });
-            document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-5 py-2.5 rounded-full font-medium shadow-sm transition-all duration-200";
+            document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
         async function translateWord() {
@@ -617,12 +575,9 @@
                 document.getElementById('res-vietnamese').innerText = data.vietnamese || 'Không có nghĩa';
                 document.getElementById('res-mnemonic').innerText = data.mnemonic || 'Đang cập nhật...';
 
-                // Bẫy lỗi an toàn: Kiểm tra tất cả các trường hợp tên biến mảng ví dụ mà AI có thể trả về
-                const examplesArray = data.examples || data.example || data.sentences || data.list_examples || [];
-
+                const examplesArray = data.examples || data.example || [];
                 const ul = document.getElementById('res-examples');
                 ul.innerHTML = '';
-                
                 if (Array.isArray(examplesArray) && examplesArray.length > 0) {
                     examplesArray.forEach(ex => {
                         const li = document.createElement('li');
@@ -630,48 +585,37 @@
                         ul.appendChild(li);
                     });
                 } else {
-                    const li = document.createElement('li');
-                    li.innerText = "Không có câu ví dụ nào được cung cấp.";
-                    ul.appendChild(li);
+                    ul.innerHTML = '<li>Không có câu ví dụ.</li>';
                 }
-
                 resBox.classList.remove('hidden');
             } catch (err) {
                 alert(`Lỗi kết nối AI Server: ${err.message}`);
             }
         }
 
-        // Hàm lõi hỗ trợ lưu LocalStorage và đẩy trực tiếp dữ liệu lên mây Firebase
         function saveLocalAndSyncCloud() {
             localStorage.setItem('flashcards', JSON.stringify(flashcards));
             if (databaseRef && !isFirebaseUpdating) {
-                databaseRef.set(flashcards)
-                    .catch(err => console.error("Lỗi đồng bộ dữ liệu lên Firebase:", err));
+                databaseRef.set(flashcards).catch(err => console.error(err));
             }
         }
 
         function saveCard() {
             if (!currentTranslationData) return;
             if (flashcards.some(c => c.word.toLowerCase() === currentTranslationData.word.toLowerCase())) {
-                return alert('Từ này đã có trong kho rồi bạn ơi!');
+                return alert('Từ này đã có trong kho rồi!');
             }
-            
             const deckName = document.getElementById('deck-input').value.trim() || 'Mặc định';
-
             const newCard = { 
                 ...currentTranslationData, 
                 deck: deckName,
-                interval: 0,       
-                repetition: 0,     
-                efactor: 2.5,      
+                interval: 0, repetition: 0, efactor: 2.5, 
                 nextReviewDate: Date.now(), 
-                ai_distractors: currentTranslationData.ai_distractors || [],
                 user_sentence: "" 
             };
             
             flashcards.push(newCard);
             saveLocalAndSyncCloud();
-            
             recordStudyActivity();
 
             const currentDeck = document.getElementById('global-deck-filter').value;
@@ -680,7 +624,7 @@
             
             updateFlashcardUI();
             refreshDashboard();
-            alert(`Đã lưu từ vào bộ chủ đề [${deckName}] thành công! 🎉`);
+            alert(`Đã lưu từ vào [${deckName}] thành công! 🎉`);
         }
 
         function updateFlashcardUI() {
@@ -707,33 +651,28 @@
             setTimeout(() => {
                 document.getElementById('card-word').innerText = card.word;
                 document.getElementById('card-img').src = card.image_url || "https://images.unsplash.com/photo-1546410531-bb4caa6b424d";
-                document.getElementById('card-back-title').innerText = `${card.word} (${card.type}) [${card.deck || 'Mặc định'}]`;
+                document.getElementById('card-back-title').innerText = `${card.word} (${card.type || ''}) [${card.deck || 'Mặc định'}]`;
                 document.getElementById('card-vietnamese').innerText = card.vietnamese;
-                document.getElementById('card-mnemonic').innerText = `💡 Mẹo nhớ: ${card.mnemonic}`;
+                document.getElementById('card-mnemonic').innerText = `💡 Mẹo nhớ: ${card.mnemonic || 'Không có'}`;
                 document.getElementById('card-user-sentence').value = card.user_sentence || "";
-            }, 200);
+            }, 150);
         }
 
         function saveUserSentence() {
             const currentDeck = document.getElementById('global-deck-filter').value;
             const displayCards = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
             if (displayCards.length === 0) return;
-
             const card = displayCards[currentCardIndex];
             const originalIndex = flashcards.findIndex(c => c.word.toLowerCase() === card.word.toLowerCase());
-            
             if (originalIndex !== -1) {
-                const sentenceVal = document.getElementById('card-user-sentence').value.trim();
-                flashcards[originalIndex].user_sentence = sentenceVal;
+                flashcards[originalIndex].user_sentence = document.getElementById('card-user-sentence').value.trim();
                 saveLocalAndSyncCloud();
-                alert('Đã lưu câu ví dụ tự đặt thành công! ✍️');
+                alert('Đã lưu câu ví dụ! ✍️');
             }
         }
 
         function toggleCardFlip() {
-            const currentDeck = document.getElementById('global-deck-filter').value;
-            const displayCards = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
-            if (displayCards.length === 0) return;
+            if (flashcards.length === 0) return;
             document.getElementById('card').classList.toggle('flipped');
         }
 
@@ -753,36 +692,25 @@
             updateFlashcardUI();
         }
 
-        // ================= PHÒNG LUYỆN TẬP ĐA NĂNG =================
+        // ================= LUYỆN TẬP =================
         function setQuizMode(mode) {
             subQuizMode = mode;
-            
-            const modes = ['dictation', 'cloze', 'listening_reverse', 'word_matching'];
-            modes.forEach(m => {
+            ['dictation', 'cloze', 'listening_reverse', 'word_matching'].forEach(m => {
                 const btn = document.getElementById(`btn-mode-${m.replace('_', '-')}`);
-                if (m === mode) {
-                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition";
-                } else {
-                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 transition hover:bg-slate-200";
-                }
-                
+                btn.className = (m === mode) ? "px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition" : "px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 transition hover:bg-slate-200";
                 const area = document.getElementById(`area-${m.replace('_', '-')}`);
                 if(area) area.classList.toggle('hidden', m !== mode);
             });
 
             document.getElementById('quiz-text-input-form').classList.toggle('hidden', mode === 'listening_reverse' || mode === 'word_matching');
             document.getElementById('quiz-multiple-choice-form').classList.toggle('hidden', mode !== 'listening_reverse');
-            
             setupQuizGame();
         }
 
         function setupQuizGame() {
             const currentDeck = document.getElementById('global-deck-filter').value;
             let pool = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
-
-            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') {
-                pool = pool.filter(c => c.examples && c.examples.length > 0);
-            }
+            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') pool = pool.filter(c => c.examples && c.examples.length > 0);
             
             if(subQuizMode === 'word_matching' && pool.length < 3) {
                 document.getElementById('quiz-box-empty').classList.remove('hidden');
@@ -807,10 +735,7 @@
         function startNewQuiz() {
             const currentDeck = document.getElementById('global-deck-filter').value;
             let pool = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
-            
-            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') {
-                pool = pool.filter(c => c.examples && c.examples.length > 0);
-            }
+            if(subQuizMode === 'cloze' || subQuizMode === 'listening_reverse') pool = pool.filter(c => c.examples && c.examples.length > 0);
             if (pool.length === 0) return setupQuizGame();
 
             document.getElementById('quiz-answer-input').value = '';
@@ -822,39 +747,25 @@
             }
 
             currentQuizWord = pool[Math.floor(Math.random() * pool.length)];
-
-            if (currentQuizWord.examples && currentQuizWord.examples.length > 0) {
-                const randomExampleIndex = Math.floor(Math.random() * currentQuizWord.examples.length);
-                currentQuizSelectedSentence = currentQuizWord.examples[randomExampleIndex];
-            } else {
-                currentQuizSelectedSentence = "";
-            }
+            currentQuizSelectedSentence = (currentQuizWord.examples && currentQuizWord.examples.length > 0) ? currentQuizWord.examples[Math.floor(Math.random() * currentQuizWord.examples.length)] : "";
 
             if (subQuizMode === 'dictation') {
                 speakWord(currentQuizWord.word);
             } else if (subQuizMode === 'cloze') {
-                const rawSentence = currentQuizSelectedSentence;
-                const regex = new RegExp(`\\b${escapeRegExp(currentQuizWord.word)}\\b`, 'gi');
-                const blankSentence = rawSentence.replace(regex, "____");
-                document.getElementById('cloze-sentence').innerText = blankSentence;
-                document.getElementById('cloze-hint').innerText = `Nghĩa: ${currentQuizWord.vietnamese} (${currentQuizWord.type})`;
+                document.getElementById('cloze-sentence').innerText = currentQuizSelectedSentence.replace(new RegExp(`\\b${escapeRegExp(currentQuizWord.word)}\\b`, 'gi'), "____");
+                document.getElementById('cloze-hint').innerText = `Nghĩa: ${currentQuizWord.vietnamese}`;
             } else if (subQuizMode === 'listening_reverse') {
                 hasAnsweredQuiz = false;
-                
-                const hintContainer = document.getElementById('reverse-meaning-display');
-                hintContainer.innerHTML = `<span id="reverse-target-word-hint" class="text-xl font-medium text-gray-400 italic">(Bấm loa để nghe câu hỏi...)</span>`;
-                
+                document.getElementById('reverse-meaning-display').innerHTML = `<span class="text-sm font-medium text-gray-400 italic">(Bấm loa để nghe...)</span>`;
                 speakReverseTarget();
                 
-                let options = [currentQuizWord.vietnamese, ...pickHardDistractors(currentQuizWord, 3)];
-                options = shuffleArray(options);
-                
+                let options = shuffleArray([currentQuizWord.vietnamese, ...pickHardDistractors(currentQuizWord, 3)]);
                 const optContainer = document.getElementById('quiz-options-container');
                 optContainer.innerHTML = '';
                 options.forEach(opt => {
                     const btn = document.createElement('button');
                     btn.innerText = opt;
-                    btn.className = "w-full bg-white hover:bg-slate-100 text-slate-800 font-semibold py-2.5 px-4 border border-slate-200 rounded-xl text-left transition";
+                    btn.className = "w-full bg-white hover:bg-slate-100 text-slate-800 font-semibold py-2 px-3 border border-slate-200 rounded-xl text-left text-xs transition";
                     btn.onclick = () => checkMultipleChoiceQuiz(opt, btn);
                     optContainer.appendChild(btn);
                 });
@@ -863,151 +774,122 @@
 
         function showQuizHint() {
             if(!currentQuizWord) return;
-            const feedback = document.getElementById('quiz-feedback');
-            feedback.className = "text-sm font-semibold text-amber-700 bg-amber-50 p-2 rounded-xl mt-3 text-center";
-            feedback.innerText = `💡 Gợi ý mẹo nhớ: ${currentQuizWord.mnemonic}`;
-            feedback.classList.remove('hidden');
+            const fb = document.getElementById('quiz-feedback');
+            fb.className = "text-xs font-semibold text-amber-700 bg-amber-50 p-2 rounded-xl mt-2 text-center";
+            fb.innerText = `💡 Mẹo nhớ: ${currentQuizWord.mnemonic}`;
+            fb.classList.remove('hidden');
         }
 
         function checkQuizAnswer() {
             const userAns = document.getElementById('quiz-answer-input').value.trim().toLowerCase();
             const correctAns = currentQuizWord.word.trim().toLowerCase();
-            const feedback = document.getElementById('quiz-feedback');
-            feedback.className = "text-sm font-bold py-2 rounded-xl mt-3 text-center";
+            const fb = document.getElementById('quiz-feedback');
+            fb.className = "text-xs font-bold py-2 rounded-xl mt-2 text-center";
 
             if (userAns === correctAns) {
-                feedback.innerText = "🎉 CHÍNH XÁC! Hệ thống tự nhảy sang từ tiếp theo...";
-                feedback.classList.add('bg-emerald-100', 'text-emerald-700');
+                fb.innerText = "🎉 CHÍNH XÁC!";
+                fb.classList.add('bg-emerald-100', 'text-emerald-700');
                 speakWord(currentQuizWord.word);
                 recordStudyActivity();
                 refreshDashboard();
-                
-                setTimeout(() => { startNewQuiz(); }, 1500);
+                setTimeout(() => { startNewQuiz(); }, 1200);
             } else {
-                feedback.innerText = `❌ CHƯA ĐÚNG! Đáp án chuẩn: "${currentQuizWord.word}"`;
-                feedback.classList.add('bg-rose-100', 'text-rose-700');
+                fb.innerText = `❌ Sai rồi! Đáp án: "${currentQuizWord.word}"`;
+                fb.classList.add('bg-rose-100', 'text-rose-700');
             }
-            feedback.classList.remove('hidden');
+            fb.classList.remove('hidden');
         }
 
         function checkMultipleChoiceQuiz(selectedText, clickedBtn) {
             if (hasAnsweredQuiz) return; 
             hasAnsweredQuiz = true;
 
-            const feedback = document.getElementById('quiz-feedback');
-            feedback.className = "text-sm font-bold p-3 rounded-xl mt-3 text-center block space-y-2";
-            
-            const hintContainer = document.getElementById('reverse-meaning-display');
-            hintContainer.innerHTML = `<h1 class="text-2xl font-extrabold text-blue-600 tracking-wide leading-relaxed">${currentQuizSelectedSentence}</h1>`;
+            const fb = document.getElementById('quiz-feedback');
+            document.getElementById('reverse-meaning-display').innerHTML = `<span class="text-xs font-bold text-blue-600">${currentQuizSelectedSentence}</span>`;
 
-            const allButtons = document.getElementById('quiz-options-container').getElementsByTagName('button');
-            
-            for(let btn of allButtons) { 
+            for(let btn of document.getElementById('quiz-options-container').getElementsByTagName('button')) { 
                 btn.disabled = true; 
-                if (btn.innerText === currentQuizWord.vietnamese) {
-                    btn.className = "w-full bg-emerald-50 text-emerald-700 font-bold py-2.5 px-4 border border-emerald-500 rounded-xl text-left shadow-sm";
-                } else if (btn.innerText === selectedText && selectedText !== currentQuizWord.vietnamese) {
-                    btn.className = "w-full bg-rose-50 text-rose-600 font-semibold py-2.5 px-4 border border-rose-400 rounded-xl text-left shadow-sm";
-                }
+                if (btn.innerText === currentQuizWord.vietnamese) btn.className = "w-full bg-emerald-50 text-emerald-700 font-bold py-2 px-3 border border-emerald-500 rounded-xl text-left text-xs";
             }
 
             if (selectedText === currentQuizWord.vietnamese) {
-                feedback.innerHTML = `<div>🎉 CHUẨN XÁC! Phản xạ nghe hiểu rất tốt. Đang đổi câu...</div>`;
-                feedback.className = "text-sm font-bold p-3 rounded-xl mt-3 text-center bg-emerald-100 text-emerald-700";
+                fb.innerText = "🎉 CHUẨN XÁC!";
+                fb.className = "text-xs font-bold p-2 rounded-xl mt-2 text-center bg-emerald-100 text-emerald-700";
                 recordStudyActivity();
                 refreshDashboard();
-                
-                setTimeout(() => { startNewQuiz(); }, 3000); 
+                setTimeout(() => { startNewQuiz(); }, 2000);
             } else {
-                feedback.innerHTML = `<div>❌ CHƯA ĐÚNG RỒI! Nghĩa chính xác là: "${currentQuizWord.vietnamese}". Chuẩn bị sang câu mới nhé! 💪</div>`;
-                feedback.className = "text-sm font-bold p-3 rounded-xl mt-3 text-center bg-rose-100 text-rose-700";
-                
-                setTimeout(() => { startNewQuiz(); }, 4000);
+                fb.innerText = `❌ Đáp án đúng: "${currentQuizWord.vietnamese}"`;
+                fb.className = "text-xs font-bold p-2 rounded-xl mt-2 text-center bg-rose-100 text-rose-700";
+                setTimeout(() => { startNewQuiz(); }, 3000);
             }
-            feedback.classList.remove('hidden');
+            fb.classList.remove('hidden');
         }
 
         function generateWordMatchingGame(pool) {
-            const size = Math.min(pool.length, 5);
+            const size = Math.min(pool.length, 4);
             const selectedCards = shuffleArray(pool).slice(0, size);
-            
-            selectedEnglishBtn = null;
-            selectedVietnameseBtn = null;
+            selectedEnglishBtn = null; selectedVietnameseBtn = null;
             document.getElementById('quiz-feedback').classList.add('hidden');
-
-            const englishItems = selectedCards.map(c => ({ id: c.word, text: c.word }));
-            const vietnameseItems = selectedCards.map(c => ({ id: c.word, text: c.vietnamese }));
 
             const engContainer = document.getElementById('match-english-column');
             const vnContainer = document.getElementById('match-vietnamese-column');
-            
-            engContainer.innerHTML = '';
-            vnContainer.innerHTML = '';
+            engContainer.innerHTML = ''; vnContainer.innerHTML = '';
 
-            shuffleArray(englishItems).forEach(item => {
+            shuffleArray(selectedCards.map(c => ({ id: c.word, text: c.word }))).forEach(item => {
                 const btn = document.createElement('button');
-                btn.innerText = item.text;
-                btn.dataset.id = item.id;
-                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-2 px-3 rounded-xl transition text-center text-sm";
+                btn.innerText = item.text; btn.dataset.id = item.id;
+                btn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
                 btn.onclick = () => handleMatchSelect(btn, 'eng');
                 engContainer.appendChild(btn);
             });
 
-            shuffleArray(vietnameseItems).forEach(item => {
+            shuffleArray(selectedCards.map(c => ({ id: c.word, text: c.vietnamese }))).forEach(item => {
                 const btn = document.createElement('button');
-                btn.innerText = item.text;
-                btn.dataset.id = item.id;
-                btn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-2 px-3 rounded-xl transition text-center text-sm";
+                btn.innerText = item.text; btn.dataset.id = item.id;
+                btn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
                 btn.onclick = () => handleMatchSelect(btn, 'vn');
                 vnContainer.appendChild(btn);
             });
         }
 
         function handleMatchSelect(btn, columnType) {
-            if (btn.classList.contains('bg-gray-100') || btn.classList.contains('opacity-40')) return;
-
+            if (btn.classList.contains('opacity-40')) return;
             if (columnType === 'eng') {
-                if (selectedEnglishBtn) selectedEnglishBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-2 px-3 rounded-xl transition text-center text-sm";
+                if (selectedEnglishBtn) selectedEnglishBtn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
                 selectedEnglishBtn = btn;
-                btn.className = "bg-blue-50 border-2 border-blue-500 text-blue-700 font-bold py-2 px-3 rounded-xl text-center text-sm shadow-sm";
+                btn.className = "bg-blue-50 border border-blue-500 text-blue-700 font-bold py-1.5 px-2 rounded-lg text-xs text-center";
                 speakWord(btn.innerText);
             } else {
-                if (selectedVietnameseBtn) selectedVietnameseBtn.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-2 px-3 rounded-xl transition text-center text-sm";
+                if (selectedVietnameseBtn) selectedVietnameseBtn.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
                 selectedVietnameseBtn = btn;
-                btn.className = "bg-emerald-50 border-2 border-emerald-500 text-emerald-700 font-bold py-2 px-3 rounded-xl text-center text-sm shadow-sm";
+                btn.className = "bg-emerald-50 border border-emerald-500 text-emerald-700 font-bold py-1.5 px-2 rounded-lg text-xs text-center";
             }
 
             if (selectedEnglishBtn && selectedVietnameseBtn) {
                 if (selectedEnglishBtn.dataset.id === selectedVietnameseBtn.dataset.id) {
-                    selectedEnglishBtn.className = "bg-emerald-500 text-white font-bold py-2 px-3 rounded-xl text-center text-sm opacity-40 pointer-events-none";
-                    selectedVietnameseBtn.className = "bg-emerald-500 text-white font-bold py-2 px-3 rounded-xl text-center text-sm opacity-40 pointer-events-none";
+                    selectedEnglishBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center opacity-40 pointer-events-none";
+                    selectedVietnameseBtn.className = "bg-emerald-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center opacity-40 pointer-events-none";
+                    selectedEnglishBtn = null; selectedVietnameseBtn = null;
                     
-                    selectedEnglishBtn = null;
-                    selectedVietnameseBtn = null;
-                    
-                    const remaining = document.getElementById('match-english-column').querySelectorAll('button:not(.opacity-40)');
-                    if (remaining.length === 0) {
-                        const feedback = document.getElementById('quiz-feedback');
-                        feedback.className = "text-sm font-bold py-2 rounded-xl mt-3 text-center bg-emerald-100 text-emerald-700";
-                        feedback.innerText = "🎉 TUYỆT VỜI! Bạn đã nối thành công tất cả các cặp từ!";
-                        feedback.classList.remove('hidden');
+                    if (document.getElementById('match-english-column').querySelectorAll('button:not(.opacity-40)').length === 0) {
+                        const fb = document.getElementById('quiz-feedback');
+                        fb.className = "text-xs font-bold py-2 rounded-xl mt-2 text-center bg-emerald-100 text-emerald-700";
+                        fb.innerText = "🎉 HOÀN THÀNH TẤT CẢ CẶP TỪ!";
+                        fb.classList.remove('hidden');
                         recordStudyActivity();
                         refreshDashboard();
-                        setTimeout(() => { startNewQuiz(); }, 2000);
+                        setTimeout(() => { startNewQuiz(); }, 1500);
                     }
                 } else {
-                    const b1 = selectedEnglishBtn;
-                    const b2 = selectedVietnameseBtn;
-                    b1.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-2 px-3 rounded-xl text-center text-sm";
-                    b2.className = "bg-rose-500 text-white border-2 border-rose-600 font-bold py-2 px-3 rounded-xl text-center text-sm";
-                    
-                    selectedEnglishBtn = null;
-                    selectedVietnameseBtn = null;
-
+                    const b1 = selectedEnglishBtn, b2 = selectedVietnameseBtn;
+                    b1.className = "bg-rose-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center";
+                    b2.className = "bg-rose-500 text-white font-bold py-1.5 px-2 rounded-lg text-xs text-center";
+                    selectedEnglishBtn = null; selectedVietnameseBtn = null;
                     setTimeout(() => {
-                        if (!b1.classList.contains('opacity-40')) b1.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-2 px-3 rounded-xl transition text-center text-sm";
-                        if (!b2.classList.contains('opacity-40')) b2.className = "bg-white border-2 border-slate-200 text-slate-700 font-medium py-2 px-3 rounded-xl transition text-center text-sm";
-                    }, 800);
+                        if (!b1.classList.contains('opacity-40')) b1.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
+                        if (!b2.classList.contains('opacity-40')) b2.className = "bg-white border border-slate-200 text-slate-700 font-medium py-1.5 px-2 rounded-lg text-xs text-center";
+                    }, 600);
                 }
             }
         }
@@ -1022,51 +904,32 @@
             let pool = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
 
             if (flashcards.length === 0) {
-                document.getElementById('review-empty-text').innerHTML = `Bạn cần ít nhất <strong class="text-blue-600">1 từ</strong> để bắt đầu bộ lọc.`;
-                emptyBox.classList.remove('hidden');
-                lockedBox.classList.add('hidden');
-                activeBox.classList.add('hidden');
+                emptyBox.classList.remove('hidden'); lockedBox.classList.add('hidden'); activeBox.classList.add('hidden');
                 return;
             }
 
             const now = Date.now();
-            let dueWords = pool.filter(c => {
-                if (!c.nextReviewDate) return true;
-                return now >= c.nextReviewDate;
-            });
-
-            if (isTestMode) dueWords = pool;
-
+            let dueWords = isTestMode ? pool : pool.filter(c => !c.nextReviewDate || now >= c.nextReviewDate);
             let availableWords = dueWords.filter(c => !skippedWords.includes(c.word.toLowerCase()));
 
             const batchLimitVal = document.getElementById('srs-batch-limit').value;
-            if (batchLimitVal !== 'all') {
-                const limitNum = parseInt(batchLimitVal);
-                if (availableWords.length > limitNum) {
-                    availableWords = availableWords.slice(0, limitNum);
-                }
+            if (batchLimitVal !== 'all' && availableWords.length > parseInt(batchLimitVal)) {
+                availableWords = availableWords.slice(0, parseInt(batchLimitVal));
             }
 
             if (pool.length > 0 && dueWords.length === 0) {
-                lockedBox.classList.remove('hidden');
-                emptyBox.classList.add('hidden');
-                activeBox.classList.add('hidden');
-            } else if (availableWords.length === 0 && pool.length > 0) {
-                document.getElementById('review-empty-text').innerHTML = `✨ Bạn đã hoàn thành các từ đến hạn của cụm ôn này.`;
-                emptyBox.classList.remove('hidden');
-                lockedBox.classList.add('hidden');
-                activeBox.classList.add('hidden');
+                lockedBox.classList.remove('hidden'); emptyBox.classList.add('hidden'); activeBox.classList.add('hidden');
+            } else if (availableWords.length === 0) {
+                document.getElementById('review-empty-text').innerHTML = `✨ Đã hoàn thành ôn tập nhóm này.`;
+                emptyBox.classList.remove('hidden'); lockedBox.classList.add('hidden'); activeBox.classList.add('hidden');
             } else {
-                emptyBox.classList.add('hidden');
-                lockedBox.classList.add('hidden');
-                activeBox.classList.remove('hidden');
+                emptyBox.classList.add('hidden'); lockedBox.classList.add('hidden'); activeBox.classList.remove('hidden');
                 startReviewGame(availableWords);
             }
         }
 
         function startReviewGame(availableWords) {
             currentReviewWord = availableWords[Math.floor(Math.random() * availableWords.length)];
-
             if (currentReviewWord.interval === undefined) currentReviewWord.interval = 0;
             if (currentReviewWord.repetition === undefined) currentReviewWord.repetition = 0;
             if (currentReviewWord.efactor === undefined) currentReviewWord.efactor = 2.5;
@@ -1075,144 +938,65 @@
             document.getElementById('review-feedback').classList.add('hidden');
             
             const badge = document.getElementById('review-interval-badge');
-            if(currentReviewWord.interval >= 15) {
-                badge.innerText = `🏆 Đã thuộc lòng (Lịch ôn: ${currentReviewWord.interval} ngày)`;
-                badge.className = "mt-2 text-xs bg-emerald-600 text-white px-2.5 py-0.5 rounded-full inline-block font-semibold";
-            } else {
-                badge.innerText = `⏱️ Chu kỳ hiện tại: ${currentReviewWord.interval} ngày`;
-                badge.className = "mt-2 text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full inline-block font-semibold";
-            }
+            badge.innerText = currentReviewWord.interval >= 15 ? `🏆 Thuộc lòng (${currentReviewWord.interval} ngày)` : `⏱️ Chu kỳ: ${currentReviewWord.interval} ngày`;
 
-            let options = [currentReviewWord.vietnamese, ...pickHardDistractors(currentReviewWord, 5)];
-            options.sort(() => Math.random() - 0.5);
-
+            let options = shuffleArray([currentReviewWord.vietnamese, ...pickHardDistractors(currentReviewWord, 3)]);
             const optionsContainer = document.getElementById('review-options');
             optionsContainer.innerHTML = '';
             options.forEach(opt => {
                 const btn = document.createElement('button');
                 btn.innerText = opt;
-                btn.className = "bg-slate-50 hover:bg-slate-100 text-slate-800 font-medium py-3 px-4 border border-slate-200 rounded-xl text-left transition active:scale-[0.99]";
+                btn.className = "bg-slate-50 hover:bg-slate-100 text-slate-800 font-medium py-2.5 px-3 border border-slate-200 rounded-xl text-left text-xs transition";
                 btn.onclick = () => selectReviewAnswer(opt, btn);
                 optionsContainer.appendChild(btn);
             });
         }
 
         function selectReviewAnswer(selectedText, clickedBtn) {
-            const feedback = document.getElementById('review-feedback');
-            feedback.className = "text-center font-bold text-sm p-3 rounded-xl mt-4";
-            feedback.classList.remove('hidden');
+            const fb = document.getElementById('review-feedback');
+            fb.className = "text-center font-bold text-xs p-2.5 rounded-xl mt-3";
+            fb.classList.remove('hidden');
 
-            const allButtons = document.getElementById('review-options').getElementsByTagName('button');
-            for(let btn of allButtons) { btn.disabled = true; }
+            for(let btn of document.getElementById('review-options').getElementsByTagName('button')) btn.disabled = true;
 
             const isCorrect = (selectedText === currentReviewWord.vietnamese);
-
             if (isCorrect) {
-                let quality = 4; 
                 currentReviewWord.repetition += 1;
-                
-                if (currentReviewWord.repetition === 1) {
-                    currentReviewWord.interval = 1; 
-                } else if (currentReviewWord.repetition === 2) {
-                    currentReviewWord.interval = 3; 
-                } else {
-                    currentReviewWord.interval = Math.round(currentReviewWord.interval * currentReviewWord.efactor);
-                }
-                
-                currentReviewWord.efactor = currentReviewWord.efactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-                if (currentReviewWord.efactor < 1.3) currentReviewWord.efactor = 1.3;
-
-                clickedBtn.className = "bg-emerald-500 text-white font-medium py-3 px-4 rounded-xl text-left border border-emerald-600 shadow-md";
-                feedback.innerText = `👍 Đúng rồi! Lịch ôn tiếp theo: ${currentReviewWord.interval} ngày.`;
-                feedback.classList.add('bg-emerald-100', 'text-emerald-800');
+                currentReviewWord.interval = currentReviewWord.repetition === 1 ? 1 : (currentReviewWord.repetition === 2 ? 3 : Math.round(currentReviewWord.interval * currentReviewWord.efactor));
+                clickedBtn.className = "bg-emerald-500 text-white font-medium py-2.5 px-3 rounded-xl text-left text-xs";
+                fb.innerText = `👍 Đúng rồi! Lịch ôn: ${currentReviewWord.interval} ngày.`;
+                fb.classList.add('bg-emerald-100', 'text-emerald-800');
             } else {
                 currentReviewWord.repetition = 0;
-                currentReviewWord.interval = 1; 
-                currentReviewWord.efactor = Math.max(1.3, currentReviewWord.efactor - 0.2);
-
-                clickedBtn.className = "bg-rose-500 text-white font-medium py-3 px-4 rounded-xl text-left border border-rose-600 shadow-md";
-                feedback.innerText = `❌ Sai rồi! Đáp án chuẩn: "${currentReviewWord.vietnamese}". Lịch ôn kéo về ngày mai!`;
-                feedback.classList.add('bg-rose-100', 'text-rose-800');
+                currentReviewWord.interval = 1;
+                clickedBtn.className = "bg-rose-500 text-white font-medium py-2.5 px-3 rounded-xl text-left text-xs";
+                fb.innerText = `❌ Sai! Đáp án: "${currentReviewWord.vietnamese}"`;
+                fb.classList.add('bg-rose-100', 'text-rose-800');
             }
 
             currentReviewWord.nextReviewDate = Date.now() + (currentReviewWord.interval * 86400000);
-
             recordStudyActivity(); 
             saveLocalAndSyncCloud();
             updateFlashcardUI();
             refreshDashboard();
-
-            setTimeout(() => { setupReviewGame(); }, 2000);
+            setTimeout(() => { setupReviewGame(); }, 1500);
         }
 
         function skipReviewWord() {
             if (!currentReviewWord) return;
             skippedWords.push(currentReviewWord.word.toLowerCase());
-            
-            const feedback = document.getElementById('review-feedback');
-            feedback.className = "text-center font-medium text-xs text-amber-700 bg-amber-50 p-2 rounded-xl mt-4";
-            feedback.innerText = `⏭️ Đã tạm bỏ qua từ "${currentReviewWord.word}".`;
-            feedback.classList.remove('hidden');
-
-            setTimeout(() => { setupReviewGame(); }, 1000);
+            setupReviewGame();
         }
 
-        // ================= EXPORT / IMPORT DATA =================
-        function exportData() {
-            if (flashcards.length === 0) return alert('Kho dữ liệu từ trống, không có gì để xuất!');
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(flashcards, null, 2));
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", `flashcards_backup_${new Date().toISOString().slice(0,10)}.json`);
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
-        }
-
-        function importData(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const imported = JSON.parse(e.target.value || e.target.result);
-                    if (Array.isArray(imported)) {
-                        if (confirm(`Bạn có chắc chắn muốn nhập ${imported.length} từ?`)) {
-                            imported.forEach(newCard => {
-                                if(!flashcards.some(c => c.word.toLowerCase() === newCard.word.toLowerCase())) {
-                                    flashcards.push(newCard);
-                                }
-                            });
-                            saveLocalAndSyncCloud();
-                            refreshDashboard();
-                            updateFlashcardUI();
-                            alert('Nhập dữ liệu dự phòng JSON thành công! 🎉');
-                        }
-                    } else {
-                        alert('Cấu trúc file JSON không hợp lệ!');
-                    }
-                } catch (err) {
-                    alert('Lỗi đọc file: ' + err.message);
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        // ================= QUẢN LÝ KHO TỪ THỦ CÔNG =================
+        // ================= QUẢN LÝ KHO TỪ =================
         function renderManagementTable() {
             const tbody = document.getElementById('management-table-body');
             const searchKeyword = document.getElementById('manage-search-input').value.trim().toLowerCase();
             tbody.innerHTML = '';
 
-            const filtered = flashcards.filter(c => 
-                c.word.toLowerCase().includes(searchKeyword) || 
-                c.vietnamese.toLowerCase().includes(searchKeyword) ||
-                (c.deck || 'Mặc định').toLowerCase().includes(searchKeyword)
-            );
-
+            const filtered = flashcards.filter(c => c.word.toLowerCase().includes(searchKeyword) || c.vietnamese.toLowerCase().includes(searchKeyword));
             if(filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-slate-400">Không tìm thấy từ khóa nào phù hợp.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-slate-400">Không tìm thấy từ phù hợp.</td></tr>`;
                 return;
             }
 
@@ -1220,71 +1004,88 @@
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition";
                 tr.innerHTML = `
-                    <td class="px-4 py-3 font-bold text-slate-800">${card.word}</td>
-                    <td class="px-4 py-3 text-xs italic text-slate-400">${card.type || 'N/A'}</td>
-                    <td class="px-4 py-3"><span class="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">${card.deck || 'Mặc định'}</span></td>
-                    <td class="px-4 py-3">
-                        <input type="text" value="${card.vietnamese}" 
-                            onchange="updateCardVietnameseDirectly('${card.word}', this.value)" 
-                            class="w-full bg-transparent hover:bg-white focus:bg-white border-b border-transparent focus:border-blue-500 px-1 py-0.5 font-medium text-emerald-600 focus:outline-none transition" 
-                            title="Bấm trực tiếp vào để sửa nghĩa rồi nhấn Enter hoặc click ra ngoài">
+                    <td class="px-3 py-2 font-bold text-slate-800">${card.word}</td>
+                    <td class="px-3 py-2 italic text-slate-400">${card.type || 'N/A'}</td>
+                    <td class="px-3 py-2"><span class="bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">${card.deck || 'Mặc định'}</span></td>
+                    <td class="px-3 py-2">
+                        <input type="text" value="${card.vietnamese}" onchange="updateCardVn('${card.word}', this.value)" class="w-full bg-transparent border-b border-transparent focus:border-blue-500 text-emerald-600 focus:outline-none">
                     </td>
-                    <td class="px-4 py-3 text-center">
-                        <button onclick="deleteCardDirectly('${card.word}')" class="text-rose-500 hover:text-rose-700 px-2 py-1 rounded transition text-xs font-bold">
-                            <i class="fa-solid fa-trash-can mr-1"></i> Xóa
-                        </button>
+                    <td class="px-3 py-2 text-center">
+                        <button onclick="deleteCard('${card.word}')" class="text-rose-500 hover:text-rose-700 text-xs font-bold"><i class="fa-solid fa-trash-can"></i></button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        function updateCardVietnameseDirectly(word, newVnValue) {
+        function updateCardVn(word, val) {
             const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
-            if (idx !== -1) {
-                flashcards[idx].vietnamese = newVnValue.trim();
-                saveLocalAndSyncCloud();
-                refreshDashboard();
-                updateFlashcardUI();
-            }
+            if (idx !== -1) { flashcards[idx].vietnamese = val.trim(); saveLocalAndSyncCloud(); refreshDashboard(); }
         }
 
-        function deleteCardDirectly(word) {
-            if (confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn từ "${word}"?`)) {
+        function deleteCard(word) {
+            if (confirm(`Xóa từ "${word}"?`)) {
                 flashcards = flashcards.filter(c => c.word.toLowerCase() !== word.toLowerCase());
-                saveLocalAndSyncCloud();
-                currentCardIndex = 0;
-                refreshDashboard();
-                updateFlashcardUI();
-                if(!document.getElementById('quiz-tab').classList.contains('hidden')) setupQuizGame();
-                if(!document.getElementById('review-tab').classList.contains('hidden')) setupReviewGame();
+                saveLocalAndSyncCloud(); refreshDashboard(); updateFlashcardUI();
             }
         }
 
-        // ================= CƠ CHẾ ĐỒNG BỘ REALTIME DATABASE =================
+        function exportData() {
+            if (flashcards.length === 0) return alert('Trống!');
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(flashcards, null, 2));
+            const a = document.createElement('a'); a.href = dataStr; a.download = `flashcards.json`;
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+
+        function importData(e) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const imported = JSON.parse(evt.target.result);
+                    if (Array.isArray(imported)) {
+                        imported.forEach(i => { if(!flashcards.some(c => c.word.toLowerCase() === i.word.toLowerCase())) flashcards.push(i); });
+                        saveLocalAndSyncCloud(); refreshDashboard(); updateFlashcardUI(); alert('Thành công!');
+                    }
+                } catch(err) { alert('Lỗi file JSON'); }
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+
+        // ================= THÔNG BÁO PUSH NOTIFICATION NGẪU NHIÊN 9H-22H =================
+        async function requestNotificationPermission() {
+            if (!("Notification" in window)) {
+                return alert("Trình duyệt của bạn không hỗ trợ thông báo đẩy!");
+            }
+            const permission = await Notification.requestPermission();
+            if (permission === "granted") {
+                alert("Đã bật thông báo thành công! Từ 9h sáng đến 10h tối, điện thoại sẽ thỉnh thoảng gửi thông báo câu đố từ vựng cho bạn.");
+                scheduleRandomNotifications();
+            } else {
+                alert("Bạn đã từ chối quyền nhận thông báo.");
+            }
+        }
+
+        function scheduleRandomNotifications() {
+            // Lưu trạng thái vào localStorage để Service Worker hoặc trang web biết
+            localStorage.setItem('enable_random_notifications', 'true');
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'START_NOTIFICATIONS', flashcards });
+            }
+        }
+
+        // ================= FIREBASE SYNC =================
         function initFirebaseSync() {
             const userId = document.getElementById('fb-user-id').value.trim();
             let configRaw = document.getElementById('fb-config-json').value.trim();
-            const statusLabel = document.getElementById('sync-status');
-
-            if (!userId || !configRaw) {
-                alert("Vui lòng điền đầy đủ ID tài khoản và Firebase Config JSON!");
-                return;
-            }
-
+            if (!userId || !configRaw) return alert('Điền thiếu thông tin!');
             if (!configRaw.startsWith('{')) configRaw = '{' + configRaw;
             if (!configRaw.endsWith('}')) configRaw = configRaw + '}';
 
             try {
                 const config = JSON.parse(configRaw);
+                if (firebase.apps.length === 0) firebase.initializeApp(config);
                 
-                if (firebase.apps.length === 0) {
-                    firebase.initializeApp(config);
-                }
-                
-                statusLabel.innerText = "ĐANG KẾT NỐI...";
-                statusLabel.className = "bg-amber-100 text-amber-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
-
+                document.getElementById('sync-status').innerText = "ĐANG KẾT NỐI...";
                 databaseRef = firebase.database().ref('users/' + userId + '/flashcards');
 
                 databaseRef.on('value', (snapshot) => {
@@ -1293,58 +1094,28 @@
                         isFirebaseUpdating = true;
                         flashcards = cloudData;
                         localStorage.setItem('flashcards', JSON.stringify(flashcards));
-                        
-                        refreshDashboard();
-                        updateFlashcardUI();
+                        refreshDashboard(); updateFlashcardUI();
                         isFirebaseUpdating = false;
-                    } else {
-                        if (flashcards.length > 0) {
-                            databaseRef.set(flashcards);
-                        }
+                    } else if (flashcards.length > 0) {
+                        databaseRef.set(flashcards);
                     }
-
-                    // ĐĂNG NHẬP THÀNH CÔNG: Kích hoạt ẩn/hiện giao diện thông minh
-                    document.getElementById('fb-login-panel').classList.add('hidden'); // Ẩn thanh nhập cồng kềnh
-                    document.getElementById('display-username').innerText = userId; // Hiện tên ở header
-                    document.getElementById('user-logged-badge').classList.remove('hidden'); // Hiện badge nhỏ
-                    
+                    document.getElementById('fb-login-panel').classList.add('hidden');
+                    document.getElementById('display-username').innerText = userId;
+                    document.getElementById('user-logged-badge').classList.remove('hidden');
                     localStorage.setItem('fb_user_id', userId);
                     localStorage.setItem('fb_config_json', configRaw);
-                }, (error) => {
-                    console.error(error);
-                    statusLabel.innerText = "❌ LỖI RULES";
-                    statusLabel.className = "bg-rose-100 text-rose-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
-                    alert("Kết nối thất bại! Bạn hãy kiểm tra lại xem đã sửa Rules trên Firebase thành true chưa nhé.");
                 });
-
-            } catch (err) {
-                alert("Đoạn Firebase Config JSON lỗi định dạng cấu trúc, hãy copy lại chuẩn xác!");
-                console.error(err);
-            }
+            } catch (err) { alert('Lỗi cấu hình Firebase JSON!'); }
         }
 
-        // HÀM ĐĂNG XUẤT ĐỂ ĐỔI TÀI KHOẢN KHÁC
         function logoutFirebase() {
-            if (confirm("Bạn có chắc chắn muốn đăng xuất tài khoản này không? Dữ liệu local vẫn sẽ được giữ lại.")) {
-                if (databaseRef) {
-                    databaseRef.off(); // Ngắt cổng lắng nghe Realtime của tài khoản cũ
-                }
-                
-                // Xóa thông tin đăng nhập cũ trong bộ nhớ
-                localStorage.removeItem('fb_user_id');
-                localStorage.removeItem('fb_config_json');
-                
-                // Trả giao diện về trạng thái ban đầu
-                document.getElementById('user-logged-badge').classList.add('hidden');
-                document.getElementById('fb-login-panel').classList.remove('hidden');
-                document.getElementById('sync-status').innerText = "OFFLINE";
-                document.getElementById('sync-status').className = "bg-slate-100 text-slate-500 text-xs font-bold px-3 py-2 rounded-lg flex items-center whitespace-nowrap";
-                
-                alert("Đã đăng xuất! Bạn có thể nhập thông tin tài khoản khác ngay bây giờ.");
-            }
+            if (databaseRef) databaseRef.off();
+            localStorage.removeItem('fb_user_id'); localStorage.removeItem('fb_config_json');
+            document.getElementById('user-logged-badge').classList.add('hidden');
+            document.getElementById('fb-login-panel').classList.remove('hidden');
+            document.getElementById('sync-status').innerText = "OFFLINE";
         }
 
-        // Tự động nạp thông tin kết nối cũ nếu đã cấu hình từ trước
         window.addEventListener('DOMContentLoaded', () => {
             const savedId = localStorage.getItem('fb_user_id');
             const savedConfig = localStorage.getItem('fb_config_json');
@@ -1360,9 +1131,9 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('🔔 Service Worker đã đăng ký thành công!', reg))
-                    .catch(err => console.error('❌ Đăng ký Service Worker thất bại:', err));
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    console.log('Service Worker đăng ký thành công');
+                });
             });
         }
     </script>
