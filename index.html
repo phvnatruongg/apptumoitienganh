@@ -325,7 +325,7 @@
 
                 <div id="quiz-multiple-choice-form" class="hidden max-w-md mx-auto">
                     <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">Chọn nghĩa tiếng Việt chính xác:</div>
-                    <div id="quiz-options-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                    <div id="quiz-options-container" class="grid grid-cols-1 gap-3"></div>
                 </div>
 
                 <div id="quiz-feedback" class="text-sm font-bold hidden py-2 rounded-xl text-center"></div>
@@ -491,7 +491,7 @@
             const a = [...arr];
             for (let i = a.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
-                [a[i], a[j]] = [a[i], a[j]];
+                [a[i], a[j]] = [a[j], a[i]];
             }
             return a;
         }
@@ -652,6 +652,25 @@
                     }
 
                     mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${vietnameseMeaning}`;
+
+                    // Cố lấy mẹo nhớ + ví dụ SÁNG TẠO từ Groq AI (không bắt buộc).
+                    // Nếu server backend lỗi/crash/trả về HTML thay vì JSON, bắt lỗi RIÊNG ở đây
+                    // và âm thầm giữ nguyên bản mặc định phía trên — không để lỗi này phá cả lượt tra từ.
+                    try {
+                        const aiRes = await fetch('/api/translate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ word: cleanInput })
+                        });
+                        const rawText = await aiRes.text();
+                        const aiData = JSON.parse(rawText); // Ném lỗi ngay nếu server trả về HTML lỗi, rơi vào catch bên dưới
+                        if (aiRes.ok && !aiData.error) {
+                            if (aiData.mnemonic) mnemonic = aiData.mnemonic;
+                            if (aiData.examples && aiData.examples.length > 0) examples = aiData.examples;
+                        }
+                    } catch (aiErr) {
+                        console.warn('Groq AI không sẵn sàng, dùng mẹo nhớ mặc định:', aiErr.message);
+                    }
                 }
 
                 currentTranslationData = {
