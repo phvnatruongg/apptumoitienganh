@@ -610,7 +610,7 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
-        // HÀM TRA TỪ AI TỐI ƯU DỊCH TỰ NHIÊN (gọi backend /api/translate: Groq dịch nghĩa + Pixabay lấy ảnh minh họa)
+        // HÀM TRA TỪ (dịch trực tiếp qua Google Translate, không phụ thuộc backend riêng để tránh lỗi server)
         async function translateWord() {
             const rawInput = document.getElementById('word-input').value.trim();
             if (!rawInput) return alert('Hãy gõ từ cần tra!');
@@ -631,7 +631,6 @@
                 let wordType = "Noun";
                 let mnemonic = "";
                 let examples = [`I study the word '${cleanInput}' every day.`];
-                let imageUrl = DEFAULT_FALLBACK_IMG;
 
                 if (DICTIONARY_OVERRIDE[cleanInput]) {
                     // Từ điển ưu tiên nghĩa sát thực tế cho các trường hợp đặc biệt đã kiểm chứng thủ công
@@ -641,22 +640,18 @@
                     mnemonic = item.mnemonic;
                     examples = [item.ex];
                 } else {
-                    // Gọi backend AI thật: Groq sinh nghĩa/mẹo nhớ/ví dụ + Pixabay lấy ảnh minh họa
-                    const res = await fetch('/api/translate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ word: cleanInput })
-                    });
+                    // Dịch trực tiếp qua Google Translate (không phụ thuộc backend riêng, ổn định hơn)
+                    const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(cleanInput)}`);
                     const data = await res.json();
-                    if (!res.ok || data.error) throw new Error(data.error || 'Không tra được từ này!');
 
-                    vietnameseMeaning = (data.vietnamese || '').toLowerCase();
-                    wordType = data.type || wordType;
-                    mnemonic = data.mnemonic || `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${vietnameseMeaning}`;
-                    examples = (data.examples && data.examples.length > 0) ? data.examples : examples;
-                    if (data.image_url) imageUrl = data.image_url;
+                    if (!data || !data[0] || !data[0][0]) throw new Error("Không tìm thấy kết quả!");
 
-                    if (!vietnameseMeaning) throw new Error("Không tìm thấy nghĩa của từ này!");
+                    vietnameseMeaning = data[0][0][0].toLowerCase();
+                    if (data[1] && data[1][0] && data[1][0][0]) {
+                        wordType = data[1][0][0];
+                    }
+
+                    mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${vietnameseMeaning}`;
                 }
 
                 currentTranslationData = {
@@ -665,8 +660,8 @@
                     vietnamese: vietnameseMeaning.toLowerCase(),
                     mnemonic: mnemonic,
                     examples: examples,
-                    image_url: imageUrl,
-                    image: imageUrl
+                    image_url: DEFAULT_FALLBACK_IMG,
+                    image: DEFAULT_FALLBACK_IMG
                 };
 
                 document.getElementById('res-word').innerText = currentTranslationData.word;
