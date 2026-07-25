@@ -631,6 +631,7 @@
                 let wordType = "Noun";
                 let mnemonic = "";
                 let examples = [`I study the word '${cleanInput}' every day.`];
+                let imageUrl = DEFAULT_FALLBACK_IMG;
 
                 if (DICTIONARY_OVERRIDE[cleanInput]) {
                     // Từ điển ưu tiên nghĩa sát thực tế cho các trường hợp đặc biệt đã kiểm chứng thủ công
@@ -653,7 +654,7 @@
 
                     mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${vietnameseMeaning}`;
 
-                    // Cố lấy mẹo nhớ + ví dụ SÁNG TẠO từ Groq AI (không bắt buộc).
+                    // Cố lấy mẹo nhớ + ví dụ SÁNG TẠO + ảnh minh họa thật từ Groq + Pixabay (không bắt buộc).
                     // Nếu server backend lỗi/crash/trả về HTML thay vì JSON, bắt lỗi RIÊNG ở đây
                     // và âm thầm giữ nguyên bản mặc định phía trên — không để lỗi này phá cả lượt tra từ.
                     try {
@@ -667,6 +668,7 @@
                         if (aiRes.ok && !aiData.error) {
                             if (aiData.mnemonic) mnemonic = aiData.mnemonic;
                             if (aiData.examples && aiData.examples.length > 0) examples = aiData.examples;
+                            if (aiData.image_url) imageUrl = aiData.image_url;
                         }
                     } catch (aiErr) {
                         console.warn('Groq AI không sẵn sàng, dùng mẹo nhớ mặc định:', aiErr.message);
@@ -679,8 +681,8 @@
                     vietnamese: vietnameseMeaning.toLowerCase(),
                     mnemonic: mnemonic,
                     examples: examples,
-                    image_url: DEFAULT_FALLBACK_IMG,
-                    image: DEFAULT_FALLBACK_IMG
+                    image_url: imageUrl,
+                    image: imageUrl
                 };
 
                 document.getElementById('res-word').innerText = currentTranslationData.word;
