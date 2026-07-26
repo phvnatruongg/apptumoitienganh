@@ -732,6 +732,7 @@
             flashcards.push(newCard);
             saveLocalAndSyncCloud();
             recordStudyActivity();
+            startBackgroundNotifications(); // Đồng bộ kho từ mới nhất cho SW (nếu đã cấp quyền thông báo)
 
             const currentDeck = document.getElementById('global-deck-filter').value;
             const displayCards = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
@@ -1276,7 +1277,23 @@
         function requestNotificationPermission() {
             if (!("Notification" in window)) return alert("Trình duyệt không hỗ trợ Thông báo.");
             Notification.requestPermission().then(permission => {
-                if (permission === "granted") alert("Đã bật thông báo ngắc ngứ nhắc nhở học từ!");
+                if (permission === "granted") {
+                    alert("Đã bật thông báo ngẫu nhiên nhắc nhở học từ!");
+                    startBackgroundNotifications();
+                }
+            });
+        }
+
+        // Đăng ký Service Worker (network-first caching + thông báo ngẫu nhiên), rồi gửi kho từ
+        // hiện tại cho nó để bắt đầu quét bắn thông báo ngẫu nhiên trong khung giờ 9h-22h.
+        // Có thể gọi lại hàm này bất cứ lúc nào (VD: sau khi thêm/xóa từ) để đồng bộ kho từ mới nhất.
+        function startBackgroundNotifications() {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            if (!('serviceWorker' in navigator)) return;
+            navigator.serviceWorker.ready.then(registration => {
+                if (registration.active) {
+                    registration.active.postMessage({ type: 'START_NOTIFICATIONS', flashcards: flashcards });
+                }
             });
         }
 
@@ -1336,6 +1353,7 @@
                 currentCardIndex = 0;
                 refreshDashboard();
                 updateFlashcardUI();
+                startBackgroundNotifications(); // Đồng bộ kho từ mới nhất cho SW (nếu đã cấp quyền thông báo)
             }
         }
 
@@ -1343,6 +1361,18 @@
         updateFlashcardUI();
         refreshDashboard();
         autoLoadFirebaseConfig();
+
+        // Đăng ký Service Worker (network-first caching để luôn lấy bản mới nhất khi có mạng,
+        // và xử lý thông báo ngẫu nhiên nhắc học từ)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').then(() => {
+                // Nếu người dùng đã từng cấp quyền thông báo ở phiên trước, tự bật lại luôn
+                // mà không cần bấm nút "Bật thông báo" mỗi lần mở app
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    startBackgroundNotifications();
+                }
+            }).catch(err => console.warn('Đăng ký Service Worker thất bại:', err));
+        }
     </script>
 </body>
 </html>
