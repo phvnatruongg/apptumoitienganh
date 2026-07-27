@@ -544,7 +544,6 @@
             const newStreak = (lastStudyDate === yesterdayStr) ? prevStreak + 1 : 1;
             localStorage.setItem('study_streak', newStreak);
             localStorage.setItem('last_study_date', todayStr);
-            saveLocalAndSyncCloud(); // Đồng bộ ngay chuỗi ngày học lên cloud để các thiết bị khác thấy khớp nhau
         }
 
         function refreshDashboard() {
@@ -707,12 +706,7 @@
         function saveLocalAndSyncCloud() {
             localStorage.setItem('flashcards', JSON.stringify(flashcards));
             if (databaseRef && !isFirebaseUpdating) {
-                const payload = {
-                    flashcards: flashcards,
-                    study_streak: parseInt(localStorage.getItem('study_streak') || '0'),
-                    last_study_date: localStorage.getItem('last_study_date') || null
-                };
-                databaseRef.set(payload).catch(err => console.error(err));
+                databaseRef.set(flashcards).catch(err => console.error(err));
             }
         }
 
@@ -1209,27 +1203,14 @@
 
                 databaseRef.on('value', (snapshot) => {
                     const data = snapshot.val();
-                    if (!data) return;
-                    isFirebaseUpdating = true;
-
-                    if (Array.isArray(data)) {
-                        // Dữ liệu cũ (trước khi có đồng bộ streak): chỉ có mảng flashcards
+                    if(data && Array.isArray(data)) {
+                        isFirebaseUpdating = true;
                         flashcards = data;
-                    } else if (data.flashcards) {
-                        // Dữ liệu mới: object bọc cả flashcards lẫn streak
-                        flashcards = data.flashcards;
-                        if (typeof data.study_streak === 'number') {
-                            localStorage.setItem('study_streak', data.study_streak);
-                        }
-                        if (data.last_study_date) {
-                            localStorage.setItem('last_study_date', data.last_study_date);
-                        }
+                        localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                        refreshDashboard();
+                        updateFlashcardUI();
+                        isFirebaseUpdating = false;
                     }
-
-                    localStorage.setItem('flashcards', JSON.stringify(flashcards));
-                    refreshDashboard();
-                    updateFlashcardUI();
-                    isFirebaseUpdating = false;
                 });
 
                 localStorage.setItem('fb_user_id', userId);
