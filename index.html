@@ -111,7 +111,7 @@
         <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">ID tài khoản cá nhân:</label>
-                <input type="text" id="fb-user-id" placeholder="Ví dụ: my_flashcards_user" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="fb-user-id" placeholder="..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Firebase Config JSON:</label>
@@ -172,6 +172,11 @@
                         <button id="btn-translate" onclick="translateWord()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition whitespace-nowrap">Tra từ</button>
                     </div>
 
+                    <div id="spell-suggestion" class="hidden text-xs text-amber-600 -mt-2 mb-3">
+                        Có phải ý bạn là:
+                        <button id="spell-suggestion-btn" onclick="acceptSpellSuggestion()" class="underline font-semibold hover:text-amber-800"></button>?
+                    </div>
+
                     <div class="mb-3">
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Gắn chủ đề (Deck):</label>
                         <input type="text" id="deck-input" placeholder="Ví dụ: Động vật, Marketing, Tech..." class="w-full px-3 py-1.5 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -181,6 +186,7 @@
                         <div class="flex items-center justify-between">
                             <div>
                                 <span id="res-word" class="text-xl font-bold text-slate-800"></span>
+                                <span id="res-phonetic" class="text-sm text-blue-400 italic ml-1"></span>
                                 <span id="res-type" class="text-xs italic text-slate-500 ml-2"></span>
                             </div>
                             <button onclick="speakWord(document.getElementById('res-word').innerText)" class="text-blue-500 hover:text-blue-700 p-2 text-lg"><i class="fa-solid fa-volume-high"></i></button>
@@ -224,6 +230,7 @@
 
                             <div class="relative z-10 space-y-3 flex flex-col items-center my-auto">
                                 <h3 id="card-word" class="text-3xl font-extrabold tracking-wide text-white drop-shadow-md">Kho trống</h3>
+                                <p id="card-phonetic" class="text-sm text-slate-300 italic -mt-2"></p>
                                 <button onclick="event.stopPropagation(); speakWord(document.getElementById('card-word').innerText)" class="bg-white/20 hover:bg-white/30 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm border border-white/20 flex items-center gap-1">
                                     <i class="fa-solid fa-volume-high"></i> Phát âm
                                 </button>
@@ -393,6 +400,7 @@
                     <thead class="text-[10px] text-slate-700 uppercase bg-slate-100 sticky top-0">
                         <tr>
                             <th class="px-3 py-2.5">Từ vựng</th>
+                            <th class="px-3 py-2.5">Phiên âm</th>
                             <th class="px-3 py-2.5">Loại</th>
                             <th class="px-3 py-2.5">Chủ đề</th>
                             <th class="px-3 py-2.5">Nghĩa Tiếng Việt</th>
@@ -611,6 +619,63 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
+        // Lấy phiên âm (và kiểm tra từ có tồn tại trong từ điển hay không) từ Free Dictionary API
+        async function fetchDictionaryData(word) {
+            try {
+                const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+                if (!res.ok) return null; // 404 = không tìm thấy trong từ điển, có thể do gõ sai chính tả
+                const data = await res.json();
+                const entry = data[0];
+                const phonetic = entry.phonetic || (entry.phonetics || []).map(p => p.text).find(Boolean) || '';
+                return { phonetic };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Gợi ý từ đúng chính tả gần nhất qua Datamuse API (chỉ áp dụng cho 1 từ, không áp dụng cho cụm từ)
+        async function checkSpelling(word) {
+            if (word.includes(' ')) return null;
+            try {
+                const res = await fetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&max=1`);
+                const data = await res.json();
+                if (data && data[0] && data[0].word && data[0].word.toLowerCase() !== word.toLowerCase()) {
+                    return data[0].word.toLowerCase();
+                }
+            } catch (e) { /* im lặng bỏ qua, không chặn luồng tra từ chính */ }
+            return null;
+        }
+
+        // Khi bấm vào gợi ý "Ý bạn là...?" -> tự điền từ đúng và tra lại luôn
+        function acceptSpellSuggestion() {
+            const suggested = document.getElementById('spell-suggestion-btn').innerText;
+            document.getElementById('word-input').value = suggested;
+            document.getElementById('spell-suggestion').classList.add('hidden');
+            translateWord();
+        }
+
+        // Sửa phiên âm thủ công trong bảng quản lý kho từ
+        function updateCardPhoneticDirectly(word, newVal) {
+            const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
+            if (idx !== -1) {
+                flashcards[idx].phonetic = newVal;
+                saveLocalAndSyncCloud();
+            }
+        }
+
+        // Lấy phiên âm cho các từ cũ đã lưu trước đây (chưa có sẵn phiên âm)
+        async function fetchPhoneticForCard(word) {
+            const dictData = await fetchDictionaryData(word);
+            const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
+            if (idx !== -1 && dictData && dictData.phonetic) {
+                flashcards[idx].phonetic = dictData.phonetic;
+                saveLocalAndSyncCloud();
+                renderManagementTable();
+            } else {
+                alert('Không tìm thấy phiên âm cho từ này trong từ điển.');
+            }
+        }
+
         // HÀM TRA TỪ (dịch trực tiếp qua Google Translate, không phụ thuộc backend riêng để tránh lỗi server)
         async function translateWord() {
             const rawInput = document.getElementById('word-input').value.trim();
@@ -626,6 +691,7 @@
             addBtnWrapper.classList.add('hidden');
 
             const cleanInput = rawInput.toLowerCase().trim();
+            document.getElementById('spell-suggestion').classList.add('hidden');
 
             try {
                 let vietnameseMeaning = "";
@@ -633,6 +699,19 @@
                 let mnemonic = "";
                 let examples = [`I study the word '${cleanInput}' every day.`];
                 let imageUrl = DEFAULT_FALLBACK_IMG;
+
+                // Kiểm tra chính tả + lấy phiên âm từ từ điển thật
+                const dictData = await fetchDictionaryData(cleanInput);
+                let phonetic = dictData?.phonetic || '';
+
+                if (!dictData) {
+                    // Không tìm thấy trong từ điển -> có thể gõ sai, thử gợi ý từ đúng chính tả
+                    const suggestion = await checkSpelling(cleanInput);
+                    if (suggestion) {
+                        document.getElementById('spell-suggestion-btn').innerText = suggestion;
+                        document.getElementById('spell-suggestion').classList.remove('hidden');
+                    }
+                }
 
                 if (DICTIONARY_OVERRIDE[cleanInput]) {
                     // Từ điển ưu tiên nghĩa sát thực tế cho các trường hợp đặc biệt đã kiểm chứng thủ công
@@ -680,6 +759,7 @@
                     word: cleanInput,
                     type: wordType,
                     vietnamese: vietnameseMeaning.toLowerCase(),
+                    phonetic: phonetic,
                     mnemonic: mnemonic,
                     examples: examples,
                     image_url: imageUrl,
@@ -687,6 +767,7 @@
                 };
 
                 document.getElementById('res-word').innerText = currentTranslationData.word;
+                document.getElementById('res-phonetic').innerText = currentTranslationData.phonetic || '';
                 document.getElementById('res-type').innerText = `(${currentTranslationData.type})`;
                 document.getElementById('res-vietnamese').innerText = currentTranslationData.vietnamese;
                 document.getElementById('res-mnemonic').innerText = currentTranslationData.mnemonic;
@@ -758,6 +839,7 @@
 
             if (displayCards.length === 0) {
                 document.getElementById('card-word').innerText = 'Kho trống';
+                document.getElementById('card-phonetic').innerText = '';
                 document.getElementById('card-back-title').innerText = 'Kho trống';
                 document.getElementById('card-vietnamese').innerText = 'Chưa có từ';
                 document.getElementById('card-mnemonic').innerText = '💡 Mẹo nhớ: Chưa có dữ liệu';
@@ -772,6 +854,7 @@
             const card = displayCards[currentCardIndex];
             setTimeout(() => {
                 document.getElementById('card-word').innerText = card.word.toLowerCase();
+                document.getElementById('card-phonetic').innerText = card.phonetic || '';
                 const imgSrc = card.image_url || card.image || DEFAULT_FALLBACK_IMG;
                 document.getElementById('card-img').src = imgSrc;
                 
@@ -1329,7 +1412,7 @@
             );
 
             if(filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-slate-400">Không tìm thấy từ nào phù hợp.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-slate-400">Không tìm thấy từ nào phù hợp.</td></tr>`;
                 return;
             }
 
@@ -1338,6 +1421,12 @@
                 tr.className = "hover:bg-slate-50 transition";
                 tr.innerHTML = `
                     <td class="px-3 py-2 font-bold text-slate-800">${card.word.toLowerCase()}</td>
+                    <td class="px-3 py-2 text-slate-400">
+                        ${card.phonetic
+                            ? `<input type="text" value="${card.phonetic}" onchange="updateCardPhoneticDirectly('${card.word}', this.value)" class="w-full bg-transparent hover:bg-white focus:bg-white border-b border-transparent focus:border-blue-500 px-1 py-0.5 text-xs focus:outline-none transition">`
+                            : `<button onclick="fetchPhoneticForCard('${card.word}')" class="text-blue-500 hover:text-blue-700 text-[10px] underline">Lấy phiên âm</button>`
+                        }
+                    </td>
                     <td class="px-3 py-2 text-[10px] italic text-slate-400">${card.type || 'N/A'}</td>
                     <td class="px-3 py-2"><span class="bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">${card.deck || 'Mặc định'}</span></td>
                     <td class="px-3 py-2">
