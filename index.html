@@ -111,7 +111,7 @@
         <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">ID tài khoản cá nhân:</label>
-                <input type="text" id="fb-user-id" placeholder="..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="fb-user-id" placeholder="Ví dụ: my_flashcards_user" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Firebase Config JSON:</label>
@@ -619,10 +619,29 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
+        // Gọi API kèm tự động thử lại nếu lỗi mạng/timeout — các API miễn phí (dictionary, datamuse)
+        // thỉnh thoảng phản hồi chậm hoặc lỗi tạm thời, thử lại giúp đỡ phải bấm tra lại thủ công.
+        async function fetchWithRetry(url, retries = 2, timeoutMs = 6000) {
+            let lastErr;
+            for (let attempt = 0; attempt <= retries; attempt++) {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), timeoutMs);
+                    const res = await fetch(url, { signal: controller.signal });
+                    clearTimeout(timer);
+                    return res;
+                } catch (e) {
+                    lastErr = e;
+                    if (attempt < retries) await new Promise(r => setTimeout(r, 400));
+                }
+            }
+            throw lastErr;
+        }
+
         // Lấy phiên âm (và kiểm tra từ có tồn tại trong từ điển hay không) từ Free Dictionary API
         async function fetchDictionaryData(word) {
             try {
-                const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+                const res = await fetchWithRetry(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
                 if (!res.ok) return null; // 404 = không tìm thấy trong từ điển, có thể do gõ sai chính tả
                 const data = await res.json();
                 const entry = data[0];
@@ -633,16 +652,29 @@
             }
         }
 
-        // Gợi ý từ đúng chính tả gần nhất qua Datamuse API (chỉ áp dụng cho 1 từ, không áp dụng cho cụm từ)
+        // Gợi ý từ đúng chính tả gần nhất qua Datamuse API (chỉ áp dụng cho 1 từ, không áp dụng cho cụm từ).
+        // Thử endpoint /sug (chuyên sửa lỗi chính tả kiểu autocomplete) trước, nếu không ra kết quả
+        // thì thử thêm endpoint /words?sp= — vì mỗi API bắt được các kiểu lỗi gõ khác nhau,
+        // dùng cả hai giúp tỉ lệ bắt được lỗi chính tả cao hơn hẳn so với chỉ dùng một API.
         async function checkSpelling(word) {
             if (word.includes(' ')) return null;
+
             try {
-                const res = await fetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&max=1`);
+                const res = await fetchWithRetry(`https://api.datamuse.com/sug?s=${encodeURIComponent(word)}&max=1`, 1);
                 const data = await res.json();
-                if (data && data[0] && data[0].word && data[0].word.toLowerCase() !== word.toLowerCase()) {
+                if (data?.[0]?.word && data[0].word.toLowerCase() !== word.toLowerCase()) {
+                    return data[0].word.toLowerCase();
+                }
+            } catch (e) { /* im lặng bỏ qua, thử tiếp phương án dự phòng bên dưới */ }
+
+            try {
+                const res = await fetchWithRetry(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&max=1`, 1);
+                const data = await res.json();
+                if (data?.[0]?.word && data[0].word.toLowerCase() !== word.toLowerCase()) {
                     return data[0].word.toLowerCase();
                 }
             } catch (e) { /* im lặng bỏ qua, không chặn luồng tra từ chính */ }
+
             return null;
         }
 
@@ -700,18 +732,11 @@
                 let examples = [`I study the word '${cleanInput}' every day.`];
                 let imageUrl = DEFAULT_FALLBACK_IMG;
 
-                // Kiểm tra chính tả + lấy phiên âm từ từ điển thật
-                const dictData = await fetchDictionaryData(cleanInput);
-                let phonetic = dictData?.phonetic || '';
-
-                if (!dictData) {
-                    // Không tìm thấy trong từ điển -> có thể gõ sai, thử gợi ý từ đúng chính tả
-                    const suggestion = await checkSpelling(cleanInput);
-                    if (suggestion) {
-                        document.getElementById('spell-suggestion-btn').innerText = suggestion;
-                        document.getElementById('spell-suggestion').classList.remove('hidden');
-                    }
-                }
+                // Bắt đầu tra từ điển (phiên âm + kiểm tra chính tả) NGAY TỪ ĐÂY nhưng chưa chờ kết quả (không await) —
+                // để nó chạy song song "nền" trong lúc phần dịch nghĩa bên dưới đang xử lý, thay vì phải
+                // xếp hàng chờ xong lần lượt. Nhờ vậy nếu API phiên âm phản hồi chậm cũng không làm
+                // chậm/đứng cả quá trình tra từ chính, và tới lúc cần dùng thì thường nó đã có kết quả sẵn rồi.
+                const dictDataPromise = fetchDictionaryData(cleanInput);
 
                 if (DICTIONARY_OVERRIDE[cleanInput]) {
                     // Từ điển ưu tiên nghĩa sát thực tế cho các trường hợp đặc biệt đã kiểm chứng thủ công
@@ -752,6 +777,19 @@
                         }
                     } catch (aiErr) {
                         console.warn('Groq AI không sẵn sàng, dùng mẹo nhớ mặc định:', aiErr.message);
+                    }
+                }
+
+                // Lấy kết quả tra từ điển đã chạy song song ở trên (thường đã xong từ lâu, hầu như không phải chờ thêm)
+                const dictData = await dictDataPromise;
+                const phonetic = dictData?.phonetic || '';
+
+                if (!dictData) {
+                    // Không tìm thấy trong từ điển -> có thể gõ sai, thử gợi ý từ đúng chính tả
+                    const suggestion = await checkSpelling(cleanInput);
+                    if (suggestion) {
+                        document.getElementById('spell-suggestion-btn').innerText = suggestion;
+                        document.getElementById('spell-suggestion').classList.remove('hidden');
                     }
                 }
 
