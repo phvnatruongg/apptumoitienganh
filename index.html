@@ -621,7 +621,7 @@
 
         // Gọi API kèm tự động thử lại nếu lỗi mạng/timeout — các API miễn phí (dictionary, datamuse)
         // thỉnh thoảng phản hồi chậm hoặc lỗi tạm thời, thử lại giúp đỡ phải bấm tra lại thủ công.
-        async function fetchWithRetry(url, retries = 2, timeoutMs = 6000) {
+        async function fetchWithRetry(url, retries = 1, timeoutMs = 4000) {
             let lastErr;
             for (let attempt = 0; attempt <= retries; attempt++) {
                 try {
@@ -732,12 +732,6 @@
                 let examples = [`I study the word '${cleanInput}' every day.`];
                 let imageUrl = DEFAULT_FALLBACK_IMG;
 
-                // Bắt đầu tra từ điển (phiên âm + kiểm tra chính tả) NGAY TỪ ĐÂY nhưng chưa chờ kết quả (không await) —
-                // để nó chạy song song "nền" trong lúc phần dịch nghĩa bên dưới đang xử lý, thay vì phải
-                // xếp hàng chờ xong lần lượt. Nhờ vậy nếu API phiên âm phản hồi chậm cũng không làm
-                // chậm/đứng cả quá trình tra từ chính, và tới lúc cần dùng thì thường nó đã có kết quả sẵn rồi.
-                const dictDataPromise = fetchDictionaryData(cleanInput);
-
                 if (DICTIONARY_OVERRIDE[cleanInput]) {
                     // Từ điển ưu tiên nghĩa sát thực tế cho các trường hợp đặc biệt đã kiểm chứng thủ công
                     const item = DICTIONARY_OVERRIDE[cleanInput];
@@ -762,12 +756,18 @@
                     // Cố lấy mẹo nhớ + ví dụ SÁNG TẠO + ảnh minh họa thật từ Groq + Pixabay (không bắt buộc).
                     // Nếu server backend lỗi/crash/trả về HTML thay vì JSON, bắt lỗi RIÊNG ở đây
                     // và âm thầm giữ nguyên bản mặc định phía trên — không để lỗi này phá cả lượt tra từ.
+                    // Có giới hạn thời gian chờ (10s): nếu Groq "cold start" hoặc quá tải quá lâu,
+                    // bỏ qua và dùng mẹo nhớ mặc định thay vì treo cả trang.
                     try {
+                        const aiController = new AbortController();
+                        const aiTimer = setTimeout(() => aiController.abort(), 10000);
                         const aiRes = await fetch('/api/translate', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ word: cleanInput })
+                            body: JSON.stringify({ word: cleanInput }),
+                            signal: aiController.signal
                         });
+                        clearTimeout(aiTimer);
                         const rawText = await aiRes.text();
                         const aiData = JSON.parse(rawText); // Ném lỗi ngay nếu server trả về HTML lỗi, rơi vào catch bên dưới
                         if (aiRes.ok && !aiData.error) {
@@ -780,32 +780,20 @@
                     }
                 }
 
-                // Lấy kết quả tra từ điển đã chạy song song ở trên (thường đã xong từ lâu, hầu như không phải chờ thêm)
-                const dictData = await dictDataPromise;
-                const phonetic = dictData?.phonetic || '';
-
-                if (!dictData) {
-                    // Không tìm thấy trong từ điển -> có thể gõ sai, thử gợi ý từ đúng chính tả
-                    const suggestion = await checkSpelling(cleanInput);
-                    if (suggestion) {
-                        document.getElementById('spell-suggestion-btn').innerText = suggestion;
-                        document.getElementById('spell-suggestion').classList.remove('hidden');
-                    }
-                }
-
                 currentTranslationData = {
                     word: cleanInput,
                     type: wordType,
                     vietnamese: vietnameseMeaning.toLowerCase(),
-                    phonetic: phonetic,
+                    phonetic: '', // sẽ được điền ngay khi tra xong ở dưới, không chặn hiển thị kết quả chính
                     mnemonic: mnemonic,
                     examples: examples,
                     image_url: imageUrl,
                     image: imageUrl
                 };
 
+                // Hiện kết quả NGAY, không chờ phiên âm — người dùng thấy nghĩa/mẹo nhớ/ví dụ tức thì
                 document.getElementById('res-word').innerText = currentTranslationData.word;
-                document.getElementById('res-phonetic').innerText = currentTranslationData.phonetic || '';
+                document.getElementById('res-phonetic').innerText = '';
                 document.getElementById('res-type').innerText = `(${currentTranslationData.type})`;
                 document.getElementById('res-vietnamese').innerText = currentTranslationData.vietnamese;
                 document.getElementById('res-mnemonic').innerText = currentTranslationData.mnemonic;
@@ -815,6 +803,26 @@
 
                 resBox.classList.remove('hidden');
                 addBtnWrapper.classList.remove('hidden');
+
+                // Tra phiên âm + kiểm tra chính tả CHẠY NGẦM phía sau, không chặn phần hiển thị ở trên.
+                // Nếu người dùng đã bấm tra từ khác trong lúc chờ, kiểm tra currentTranslationData.word
+                // để không lỡ tay ghi đè phiên âm của từ cũ lên kết quả của từ mới đang hiển thị.
+                fetchDictionaryData(cleanInput).then(dictData => {
+                    if (!currentTranslationData || currentTranslationData.word !== cleanInput) return;
+                    const phonetic = dictData?.phonetic || '';
+                    if (phonetic) {
+                        currentTranslationData.phonetic = phonetic;
+                        document.getElementById('res-phonetic').innerText = phonetic;
+                    }
+                    if (!dictData) {
+                        checkSpelling(cleanInput).then(suggestion => {
+                            if (suggestion && document.getElementById('word-input').value.trim().toLowerCase() === cleanInput) {
+                                document.getElementById('spell-suggestion-btn').innerText = suggestion;
+                                document.getElementById('spell-suggestion').classList.remove('hidden');
+                            }
+                        });
+                    }
+                });
             } catch (err) {
                 alert(`Lỗi tra từ vựng: ${err.message}`);
             } finally {
@@ -823,15 +831,22 @@
             }
         }
 
+        let saveCloudDebounceTimer = null;
         function saveLocalAndSyncCloud() {
             localStorage.setItem('flashcards', JSON.stringify(flashcards));
             if (databaseRef && !isFirebaseUpdating) {
-                const payload = {
-                    flashcards: flashcards,
-                    study_streak: parseInt(localStorage.getItem('study_streak') || '0'),
-                    last_study_date: localStorage.getItem('last_study_date') || null
-                };
-                databaseRef.set(payload).catch(err => console.error(err));
+                // Gom các lần lưu liên tiếp (vd: học nhiều thẻ liên tục) thành 1 lần ghi lên Firebase
+                // sau 600ms ngừng thao tác, thay vì gửi lại toàn bộ dữ liệu mỗi lần — đỡ tốn mạng hơn
+                // hẳn khi có 2 người dùng chung 1 kho từ.
+                clearTimeout(saveCloudDebounceTimer);
+                saveCloudDebounceTimer = setTimeout(() => {
+                    const payload = {
+                        flashcards: flashcards,
+                        study_streak: parseInt(localStorage.getItem('study_streak') || '0'),
+                        last_study_date: localStorage.getItem('last_study_date') || null
+                    };
+                    databaseRef.set(payload).catch(err => console.error(err));
+                }, 600);
             }
         }
 
