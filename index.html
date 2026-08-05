@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI English Flashcards v3.3 Pro</title>
+    <title>AI English Flashcards v3.4 Pro</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
@@ -34,7 +34,6 @@
         }
         .back { transform: rotateY(180deg); }
 
-        /* Kích thước nút đáp án chuẩn dễ bấm */
         .quiz-opt-btn {
             min-height: 60px;
             font-size: 16px !important;
@@ -172,11 +171,6 @@
                         <button id="btn-translate" onclick="translateWord()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition whitespace-nowrap">Tra từ</button>
                     </div>
 
-                    <div id="spell-suggestion" class="hidden text-xs text-amber-600 -mt-2 mb-3">
-                        Có phải ý bạn là:
-                        <button id="spell-suggestion-btn" onclick="acceptSpellSuggestion()" class="underline font-semibold hover:text-amber-800"></button>?
-                    </div>
-
                     <div class="mb-3">
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Gắn chủ đề (Deck):</label>
                         <input type="text" id="deck-input" placeholder="Ví dụ: Động vật, Marketing, Tech..." class="w-full px-3 py-1.5 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -186,8 +180,8 @@
                         <div class="flex items-center justify-between">
                             <div>
                                 <span id="res-word" class="text-xl font-bold text-slate-800"></span>
-                                <span id="res-phonetic" class="text-sm text-blue-400 italic ml-1"></span>
-                                <span id="res-type" class="text-xs italic text-slate-500 ml-2"></span>
+                                <span id="res-phonetic" class="text-xs font-mono text-blue-500 ml-1"></span>
+                                <span id="res-type" class="text-xs italic text-slate-500 ml-1"></span>
                             </div>
                             <button onclick="speakWord(document.getElementById('res-word').innerText)" class="text-blue-500 hover:text-blue-700 p-2 text-lg"><i class="fa-solid fa-volume-high"></i></button>
                         </div>
@@ -218,7 +212,7 @@
                     <span id="flashcard-count" class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Kho: 0 từ</span>
                 </div>
 
-                <!-- Khung Thẻ Cố Định Layout Không Nhảy Trôi -->
+                <!-- Khung Thẻ Cố Định Layout -->
                 <div class="flashcard-container w-full h-80 mb-3 select-none">
                     <div class="flashcard" id="card" onclick="toggleCardFlip()">
                         <!-- Mặt trước của Flashcard -->
@@ -226,12 +220,12 @@
                             <img id="card-img" src="https://images.unsplash.com/photo-1546410531-bb4caa6b424d" onerror="handleImageError(this)" class="absolute inset-0 w-full h-full object-cover opacity-45 pointer-events-none transition-opacity">
                             <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20"></div>
                             
-                            <div class="w-full"></div> <!-- Spacer top -->
+                            <div class="w-full"></div>
 
-                            <div class="relative z-10 space-y-3 flex flex-col items-center my-auto">
+                            <div class="relative z-10 space-y-2 flex flex-col items-center my-auto">
                                 <h3 id="card-word" class="text-3xl font-extrabold tracking-wide text-white drop-shadow-md">Kho trống</h3>
-                                <p id="card-phonetic" class="text-sm text-slate-300 italic -mt-2"></p>
-                                <button onclick="event.stopPropagation(); speakWord(document.getElementById('card-word').innerText)" class="bg-white/20 hover:bg-white/30 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm border border-white/20 flex items-center gap-1">
+                                <div id="card-phonetic" class="text-sm font-mono text-amber-300 tracking-wider"></div>
+                                <button onclick="event.stopPropagation(); speakWord(document.getElementById('card-word').innerText)" class="bg-white/20 hover:bg-white/30 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm border border-white/20 flex items-center gap-1 mt-1">
                                     <i class="fa-solid fa-volume-high"></i> Phát âm
                                 </button>
                             </div>
@@ -363,12 +357,12 @@
             <div id="review-box-active" class="hidden space-y-4">
                 <div class="bg-slate-900 text-white p-6 rounded-2xl text-center shadow-md">
                     <div id="review-word" class="text-3xl font-black tracking-wide text-amber-400">Word</div>
+                    <div id="review-phonetic" class="text-sm font-mono text-slate-300 mt-1"></div>
                     <div id="review-interval-badge" class="mt-2 text-[11px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block font-semibold"></div>
                 </div>
 
                 <div>
                     <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 text-center">Chọn nghĩa đúng (6 lựa chọn):</div>
-                    <!-- Lưới 6 đáp án SRS in thường -->
                     <div id="review-options" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
                 </div>
 
@@ -434,8 +428,10 @@
         let databaseRef = null;
         let isFirebaseUpdating = false;
 
+        // Cache local cho lượt tra từ tức thì
+        const searchCache = {};
+
         const DEFAULT_FALLBACK_IMG = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=600&auto=format&fit=crop&q=80";
-        // Kho từ nhiễu phong phú 100% chữ in thường
         const DEFAULT_DISTRACTORS = [
             "bụng", "lửng mật", "trái táo", "xin chào", "cảm ơn", "con chó", 
             "học tập", "hạnh phúc", "thái độ", "kiên trì", "thành công", "sáng tạo",
@@ -443,14 +439,13 @@
             "bánh mì", "trường học", "công việc", "gia đình", "bạn bè", "thời tiết"
         ];
 
-        // Từ điển chuẩn ngữ cảnh thoát nghĩa (ví dụ: honey badger -> lửng mật)
         const DICTIONARY_OVERRIDE = {
-            "honey badger": { meaning: "lửng mật", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "The honey badger is widely known for its fearlessness." },
-            "honney badger": { meaning: "lửng mật", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "The honey badger is widely known for its fearlessness." },
-            "honey badgers": { meaning: "lửng mật", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "Honey badgers are famous for their toughness." },
-            "honney badgers": { meaning: "lửng mật", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "Honey badgers are famous for their toughness." },
-            "tummy": { meaning: "bụng", type: "Noun", mnemonic: "Gắn liền 'tummy' với hình ảnh chiếc 'tủ mì' nằm ở bụng.", ex: "My tummy is full after lunch." },
-            "tummies": { meaning: "bụng", type: "Noun", mnemonic: "Gắn liền 'tummy' với hình ảnh chiếc 'tủ mì' nằm ở bụng.", ex: "Cats like to have their tummies rubbed." }
+            "honey badger": { meaning: "lửng mật", phonetic: "/ˈhʌn.i ˌbædʒ.ər/", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "The honey badger is widely known for its fearlessness." },
+            "honney badger": { meaning: "lửng mật", phonetic: "/ˈhʌn.i ˌbædʒ.ər/", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "The honey badger is widely known for its fearlessness." },
+            "honey badgers": { meaning: "lửng mật", phonetic: "/ˈhʌn.i ˌbædʒ.ərz/", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "Honey badgers are famous for their toughness." },
+            "honney badgers": { meaning: "lửng mật", phonetic: "/ˈhʌn.i ˌbædʒ.ərz/", type: "Noun", mnemonic: "Tưởng tượng loài lửng siêu lì bợm thích ăn mật ong nhưng không sợ bất kỳ loài nào.", ex: "Honey badgers are famous for their toughness." },
+            "tummy": { meaning: "bụng", phonetic: "/ˈtʌm.i/", type: "Noun", mnemonic: "Gắn liền 'tummy' với hình ảnh chiếc 'tủ mì' nằm ở bụng.", ex: "My tummy is full after lunch." },
+            "tummies": { meaning: "bụng", phonetic: "/ˈtʌm.iz/", type: "Noun", mnemonic: "Gắn liền 'tummy' với hình ảnh chiếc 'tủ mì' nằm ở bụng.", ex: "Cats like to have their tummies rubbed." }
         };
 
         function handleImageError(imgEl) {
@@ -504,7 +499,6 @@
             return a;
         }
 
-        // Lấy 5 đáp án gây nhiễu để tạo đủ 6 đáp án SRS
         function pickHardDistractors(reviewWord, count = 5) {
             const correctVN = reviewWord.vietnamese.toLowerCase().trim();
             const used = new Set([correctVN]);
@@ -552,7 +546,7 @@
             const newStreak = (lastStudyDate === yesterdayStr) ? prevStreak + 1 : 1;
             localStorage.setItem('study_streak', newStreak);
             localStorage.setItem('last_study_date', todayStr);
-            saveLocalAndSyncCloud(); // Đồng bộ ngay chuỗi ngày học lên cloud để các thiết bị khác thấy khớp nhau
+            saveLocalAndSyncCloud();
         }
 
         function refreshDashboard() {
@@ -619,234 +613,135 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
-        // Gọi API kèm tự động thử lại nếu lỗi mạng/timeout — các API miễn phí (dictionary, datamuse)
-        // thỉnh thoảng phản hồi chậm hoặc lỗi tạm thời, thử lại giúp đỡ phải bấm tra lại thủ công.
-        async function fetchWithRetry(url, retries = 1, timeoutMs = 4000) {
-            let lastErr;
-            for (let attempt = 0; attempt <= retries; attempt++) {
-                try {
-                    const controller = new AbortController();
-                    const timer = setTimeout(() => controller.abort(), timeoutMs);
-                    const res = await fetch(url, { signal: controller.signal });
-                    clearTimeout(timer);
-                    return res;
-                } catch (e) {
-                    lastErr = e;
-                    if (attempt < retries) await new Promise(r => setTimeout(r, 400));
-                }
-            }
-            throw lastErr;
-        }
-
-        // Lấy phiên âm (và kiểm tra từ có tồn tại trong từ điển hay không) từ Free Dictionary API
-        async function fetchDictionaryData(word) {
-            try {
-                const res = await fetchWithRetry(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-                if (!res.ok) return null; // 404 = không tìm thấy trong từ điển, có thể do gõ sai chính tả
-                const data = await res.json();
-                const entry = data[0];
-                const phonetic = entry.phonetic || (entry.phonetics || []).map(p => p.text).find(Boolean) || '';
-                return { phonetic };
-            } catch (e) {
-                return null;
-            }
-        }
-
-        // Gợi ý từ đúng chính tả gần nhất qua Datamuse API (chỉ áp dụng cho 1 từ, không áp dụng cho cụm từ).
-        // Thử endpoint /sug (chuyên sửa lỗi chính tả kiểu autocomplete) trước, nếu không ra kết quả
-        // thì thử thêm endpoint /words?sp= — vì mỗi API bắt được các kiểu lỗi gõ khác nhau,
-        // dùng cả hai giúp tỉ lệ bắt được lỗi chính tả cao hơn hẳn so với chỉ dùng một API.
-        async function checkSpelling(word) {
-            if (word.includes(' ')) return null;
-
-            try {
-                const res = await fetchWithRetry(`https://api.datamuse.com/sug?s=${encodeURIComponent(word)}&max=1`, 1);
-                const data = await res.json();
-                if (data?.[0]?.word && data[0].word.toLowerCase() !== word.toLowerCase()) {
-                    return data[0].word.toLowerCase();
-                }
-            } catch (e) { /* im lặng bỏ qua, thử tiếp phương án dự phòng bên dưới */ }
-
-            try {
-                const res = await fetchWithRetry(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&max=1`, 1);
-                const data = await res.json();
-                if (data?.[0]?.word && data[0].word.toLowerCase() !== word.toLowerCase()) {
-                    return data[0].word.toLowerCase();
-                }
-            } catch (e) { /* im lặng bỏ qua, không chặn luồng tra từ chính */ }
-
-            return null;
-        }
-
-        // Khi bấm vào gợi ý "Ý bạn là...?" -> tự điền từ đúng và tra lại luôn
-        function acceptSpellSuggestion() {
-            const suggested = document.getElementById('spell-suggestion-btn').innerText;
-            document.getElementById('word-input').value = suggested;
-            document.getElementById('spell-suggestion').classList.add('hidden');
-            translateWord();
-        }
-
-        // Sửa phiên âm thủ công trong bảng quản lý kho từ
-        function updateCardPhoneticDirectly(word, newVal) {
-            const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
-            if (idx !== -1) {
-                flashcards[idx].phonetic = newVal;
-                saveLocalAndSyncCloud();
-            }
-        }
-
-        // Lấy phiên âm cho các từ cũ đã lưu trước đây (chưa có sẵn phiên âm)
-        async function fetchPhoneticForCard(word) {
-            const dictData = await fetchDictionaryData(word);
-            const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
-            if (idx !== -1 && dictData && dictData.phonetic) {
-                flashcards[idx].phonetic = dictData.phonetic;
-                saveLocalAndSyncCloud();
-                renderManagementTable();
-            } else {
-                alert('Không tìm thấy phiên âm cho từ này trong từ điển.');
-            }
-        }
-
-        // HÀM TRA TỪ (dịch trực tiếp qua Google Translate, không phụ thuộc backend riêng để tránh lỗi server)
+        // ================= HÀM TRA TỪ SIÊU TỐC (HYBRID 2 THÌ) =================
         async function translateWord() {
             const rawInput = document.getElementById('word-input').value.trim();
             if (!rawInput) return alert('Hãy gõ từ cần tra!');
             
+            const cleanInput = rawInput.toLowerCase().trim();
             const btnTranslate = document.getElementById('btn-translate');
-            btnTranslate.disabled = true;
-            btnTranslate.innerText = "Đang tra...";
-
             const resBox = document.getElementById('result-box');
             const addBtnWrapper = document.getElementById('add-btn-wrapper');
+            
+            // Nếu từ đã nằm trong Cache -> Bật ngay lập tức trong 0.001s!
+            if (searchCache[cleanInput]) {
+                currentTranslationData = searchCache[cleanInput];
+                renderTranslationResult(currentTranslationData);
+                resBox.classList.remove('hidden');
+                addBtnWrapper.classList.remove('hidden');
+                return;
+            }
+
+            btnTranslate.disabled = true;
+            btnTranslate.innerText = "Đang tra...";
             resBox.classList.add('hidden');
             addBtnWrapper.classList.add('hidden');
 
-            const cleanInput = rawInput.toLowerCase().trim();
-            document.getElementById('spell-suggestion').classList.add('hidden');
+            let vietnameseMeaning = "";
+            let phoneticText = "";
+            let wordType = "Noun";
+            let mnemonic = "💡 AI đang suy nghĩ mẹo nhớ...";
+            let examples = [`I study the word '${cleanInput}' every day.`];
+            let imageUrl = DEFAULT_FALLBACK_IMG;
 
             try {
-                let vietnameseMeaning = "";
-                let wordType = "Noun";
-                let mnemonic = "";
-                let examples = [`I study the word '${cleanInput}' every day.`];
-                let imageUrl = DEFAULT_FALLBACK_IMG;
+                // THÌ 1: Lấy Nghĩa + IPA cực nhanh (< 0.2s)
+                const [transRes, dictRes] = await Promise.allSettled([
+                    fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(cleanInput)}`).then(r => r.json()),
+                    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanInput)}`).then(r => r.json())
+                ]);
+
+                if (transRes.status === 'fulfilled' && transRes.value?.[0]?.[0]?.[0]) {
+                    vietnameseMeaning = transRes.value[0][0][0].toLowerCase();
+                    if (transRes.value[1]?.[0]?.[0]) wordType = transRes.value[1][0][0];
+                }
+
+                if (dictRes.status === 'fulfilled' && dictRes.value?.[0]) {
+                    const dData = dictRes.value[0];
+                    phoneticText = dData.phonetic || (dData.phonetics && dData.phonetics.find(p => p.text)?.text) || "";
+                }
 
                 if (DICTIONARY_OVERRIDE[cleanInput]) {
-                    // Từ điển ưu tiên nghĩa sát thực tế cho các trường hợp đặc biệt đã kiểm chứng thủ công
                     const item = DICTIONARY_OVERRIDE[cleanInput];
                     vietnameseMeaning = item.meaning;
+                    if (item.phonetic) phoneticText = item.phonetic;
                     wordType = item.type;
                     mnemonic = item.mnemonic;
                     examples = [item.ex];
-                } else {
-                    // Dịch trực tiếp qua Google Translate (không phụ thuộc backend riêng, ổn định hơn)
-                    const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(cleanInput)}`);
-                    const data = await res.json();
-
-                    if (!data || !data[0] || !data[0][0]) throw new Error("Không tìm thấy kết quả!");
-
-                    vietnameseMeaning = data[0][0][0].toLowerCase();
-                    if (data[1] && data[1][0] && data[1][0][0]) {
-                        wordType = data[1][0][0];
-                    }
-
-                    mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${vietnameseMeaning}`;
-
-                    // Cố lấy mẹo nhớ + ví dụ SÁNG TẠO + ảnh minh họa thật từ Groq + Pixabay (không bắt buộc).
-                    // Nếu server backend lỗi/crash/trả về HTML thay vì JSON, bắt lỗi RIÊNG ở đây
-                    // và âm thầm giữ nguyên bản mặc định phía trên — không để lỗi này phá cả lượt tra từ.
-                    // Có giới hạn thời gian chờ (10s): nếu Groq "cold start" hoặc quá tải quá lâu,
-                    // bỏ qua và dùng mẹo nhớ mặc định thay vì treo cả trang.
-                    try {
-                        const aiController = new AbortController();
-                        const aiTimer = setTimeout(() => aiController.abort(), 10000);
-                        const aiRes = await fetch('/api/translate', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ word: cleanInput }),
-                            signal: aiController.signal
-                        });
-                        clearTimeout(aiTimer);
-                        const rawText = await aiRes.text();
-                        const aiData = JSON.parse(rawText); // Ném lỗi ngay nếu server trả về HTML lỗi, rơi vào catch bên dưới
-                        if (aiRes.ok && !aiData.error) {
-                            if (aiData.mnemonic) mnemonic = aiData.mnemonic;
-                            if (aiData.examples && aiData.examples.length > 0) examples = aiData.examples;
-                            if (aiData.image_url) imageUrl = aiData.image_url;
-                        }
-                    } catch (aiErr) {
-                        console.warn('Groq AI không sẵn sàng, dùng mẹo nhớ mặc định:', aiErr.message);
-                    }
                 }
 
                 currentTranslationData = {
                     word: cleanInput,
+                    phonetic: phoneticText,
                     type: wordType,
-                    vietnamese: vietnameseMeaning.toLowerCase(),
-                    phonetic: '', // sẽ được điền ngay khi tra xong ở dưới, không chặn hiển thị kết quả chính
+                    vietnamese: vietnameseMeaning || cleanInput,
                     mnemonic: mnemonic,
                     examples: examples,
                     image_url: imageUrl,
                     image: imageUrl
                 };
 
-                // Hiện kết quả NGAY, không chờ phiên âm — người dùng thấy nghĩa/mẹo nhớ/ví dụ tức thì
-                document.getElementById('res-word').innerText = currentTranslationData.word;
-                document.getElementById('res-phonetic').innerText = '';
-                document.getElementById('res-type').innerText = `(${currentTranslationData.type})`;
-                document.getElementById('res-vietnamese').innerText = currentTranslationData.vietnamese;
-                document.getElementById('res-mnemonic').innerText = currentTranslationData.mnemonic;
-
-                const ul = document.getElementById('res-examples');
-                ul.innerHTML = examples.map(ex => `<li>${ex}</li>`).join('');
-
+                // HIỂN THỊ KẾT QUẢ NGAY LẬP TỨC CHO NGƯỜI DÙNG!
+                renderTranslationResult(currentTranslationData);
                 resBox.classList.remove('hidden');
                 addBtnWrapper.classList.remove('hidden');
+                btnTranslate.disabled = false;
+                btnTranslate.innerText = "Tra từ";
 
-                // Tra phiên âm + kiểm tra chính tả CHẠY NGẦM phía sau, không chặn phần hiển thị ở trên.
-                // Nếu người dùng đã bấm tra từ khác trong lúc chờ, kiểm tra currentTranslationData.word
-                // để không lỡ tay ghi đè phiên âm của từ cũ lên kết quả của từ mới đang hiển thị.
-                fetchDictionaryData(cleanInput).then(dictData => {
-                    if (!currentTranslationData || currentTranslationData.word !== cleanInput) return;
-                    const phonetic = dictData?.phonetic || '';
-                    if (phonetic) {
-                        currentTranslationData.phonetic = phonetic;
-                        document.getElementById('res-phonetic').innerText = phonetic;
-                    }
-                    if (!dictData) {
-                        checkSpelling(cleanInput).then(suggestion => {
-                            if (suggestion && document.getElementById('word-input').value.trim().toLowerCase() === cleanInput) {
-                                document.getElementById('spell-suggestion-btn').innerText = suggestion;
-                                document.getElementById('spell-suggestion').classList.remove('hidden');
-                            }
-                        });
-                    }
-                });
+                // THÌ 2: Gọi Groq AI ngầm ở phía sau để cập nhật Mẹo nhớ + Ví dụ sinh động
+                if (!DICTIONARY_OVERRIDE[cleanInput]) {
+                    fetch('/api/translate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ word: cleanInput })
+                    })
+                    .then(res => res.json())
+                    .then(aiData => {
+                        if (aiData && !aiData.error) {
+                            if (aiData.mnemonic) currentTranslationData.mnemonic = aiData.mnemonic;
+                            if (aiData.examples && aiData.examples.length > 0) currentTranslationData.examples = aiData.examples;
+                            if (aiData.image_url) currentTranslationData.image_url = aiData.image_url;
+                            if (aiData.phonetic && !currentTranslationData.phonetic) currentTranslationData.phonetic = aiData.phonetic;
+
+                            renderTranslationResult(currentTranslationData);
+                            searchCache[cleanInput] = { ...currentTranslationData };
+                        }
+                    })
+                    .catch(err => {
+                        currentTranslationData.mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${currentTranslationData.vietnamese}`;
+                        renderTranslationResult(currentTranslationData);
+                    });
+                } else {
+                    searchCache[cleanInput] = { ...currentTranslationData };
+                }
+
             } catch (err) {
                 alert(`Lỗi tra từ vựng: ${err.message}`);
-            } finally {
                 btnTranslate.disabled = false;
                 btnTranslate.innerText = "Tra từ";
             }
         }
 
-        let saveCloudDebounceTimer = null;
+        function renderTranslationResult(data) {
+            document.getElementById('res-word').innerText = data.word;
+            document.getElementById('res-phonetic').innerText = data.phonetic || "";
+            document.getElementById('res-type').innerText = `(${data.type})`;
+            document.getElementById('res-vietnamese').innerText = data.vietnamese;
+            document.getElementById('res-mnemonic').innerText = data.mnemonic;
+
+            const ul = document.getElementById('res-examples');
+            ul.innerHTML = (data.examples || []).map(ex => `<li>${ex}</li>`).join('');
+        }
+
         function saveLocalAndSyncCloud() {
             localStorage.setItem('flashcards', JSON.stringify(flashcards));
             if (databaseRef && !isFirebaseUpdating) {
-                // Gom các lần lưu liên tiếp (vd: học nhiều thẻ liên tục) thành 1 lần ghi lên Firebase
-                // sau 600ms ngừng thao tác, thay vì gửi lại toàn bộ dữ liệu mỗi lần — đỡ tốn mạng hơn
-                // hẳn khi có 2 người dùng chung 1 kho từ.
-                clearTimeout(saveCloudDebounceTimer);
-                saveCloudDebounceTimer = setTimeout(() => {
-                    const payload = {
-                        flashcards: flashcards,
-                        study_streak: parseInt(localStorage.getItem('study_streak') || '0'),
-                        last_study_date: localStorage.getItem('last_study_date') || null
-                    };
-                    databaseRef.set(payload).catch(err => console.error(err));
-                }, 600);
+                const payload = {
+                    flashcards: flashcards,
+                    study_streak: parseInt(localStorage.getItem('study_streak') || '0'),
+                    last_study_date: localStorage.getItem('last_study_date') || null
+                };
+                databaseRef.set(payload).catch(err => console.error(err));
             }
         }
 
@@ -856,7 +751,6 @@
                 return alert('Từ này đã có trong kho rồi!');
             }
             const deckName = document.getElementById('deck-input').value.trim() || 'Mặc định';
-            // Giữ nguyên ảnh thật đã tra được từ backend (Pixabay), không ghi đè bằng nguồn ảnh khác
             const wordImage = currentTranslationData.image_url || DEFAULT_FALLBACK_IMG;
 
             const newCard = { 
@@ -872,7 +766,7 @@
             flashcards.push(newCard);
             saveLocalAndSyncCloud();
             recordStudyActivity();
-            startBackgroundNotifications(); // Đồng bộ kho từ mới nhất cho SW (nếu đã cấp quyền thông báo)
+            startBackgroundNotifications();
 
             const currentDeck = document.getElementById('global-deck-filter').value;
             const displayCards = currentDeck === 'all' ? flashcards : flashcards.filter(c => (c.deck || 'Mặc định') === currentDeck);
@@ -907,11 +801,11 @@
             const card = displayCards[currentCardIndex];
             setTimeout(() => {
                 document.getElementById('card-word').innerText = card.word.toLowerCase();
-                document.getElementById('card-phonetic').innerText = card.phonetic || '';
+                document.getElementById('card-phonetic').innerText = card.phonetic || "";
                 const imgSrc = card.image_url || card.image || DEFAULT_FALLBACK_IMG;
                 document.getElementById('card-img').src = imgSrc;
                 
-                document.getElementById('card-back-title').innerText = `${card.word.toLowerCase()} (${card.type || 'N/A'}) [${card.deck || 'Mặc định'}]`;
+                document.getElementById('card-back-title').innerText = `${card.word.toLowerCase()} ${card.phonetic ? card.phonetic + ' ' : ''}(${card.type || 'N/A'}) [${card.deck || 'Mặc định'}]`;
                 document.getElementById('card-vietnamese').innerText = card.vietnamese.toLowerCase();
                 document.getElementById('card-mnemonic').innerText = `💡 Mẹo nhớ: ${card.mnemonic || 'Không có mẹo nhớ'}`;
                 document.getElementById('card-user-sentence').value = card.user_sentence || "";
@@ -1037,7 +931,6 @@
                 
                 speakReverseTarget();
                 
-                // 4 Đáp án in thường (1 đúng + 3 nhiễu)
                 let options = shuffleArray([currentQuizWord.vietnamese.toLowerCase(), ...pickHardDistractors(currentQuizWord, 3)]);
                 const optContainer = document.getElementById('quiz-options-container');
                 optContainer.innerHTML = '';
@@ -1196,7 +1089,7 @@
             }
         }
 
-        // ================= THUẬT TOÁN SRS 6 ĐÁP ÁN =================
+        // ================= THUẬT TOÁN SRS =================
         function setupReviewGame() {
             const emptyBox = document.getElementById('review-box-empty');
             const lockedBox = document.getElementById('review-box-locked');
@@ -1248,6 +1141,7 @@
             if (currentReviewWord.efactor === undefined) currentReviewWord.efactor = 2.5;
 
             document.getElementById('review-word').innerText = currentReviewWord.word.toLowerCase();
+            document.getElementById('review-phonetic').innerText = currentReviewWord.phonetic || '';
             document.getElementById('review-feedback').classList.add('hidden');
             
             const badge = document.getElementById('review-interval-badge');
@@ -1259,7 +1153,6 @@
                 badge.className = "mt-2 text-[11px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block font-semibold";
             }
 
-            // Tạo đúng 6 đáp án SRS in thường
             let options = shuffleArray([currentReviewWord.vietnamese.toLowerCase(), ...pickHardDistractors(currentReviewWord, 5)]);
             const optionsContainer = document.getElementById('review-options');
             optionsContainer.innerHTML = '';
@@ -1316,7 +1209,7 @@
             setupReviewGame();
         }
 
-        // ================= KHU VỰC ĐỒNG BỘ FIREBASE =================
+        // ================= ĐỒNG BỘ FIREBASE =================
         function toggleFirebasePanel() {
             const panel = document.getElementById('fb-login-panel');
             panel.classList.toggle('hidden');
@@ -1349,10 +1242,8 @@
                     isFirebaseUpdating = true;
 
                     if (Array.isArray(data)) {
-                        // Dữ liệu cũ (trước khi có đồng bộ streak): chỉ có mảng flashcards
                         flashcards = data;
                     } else if (data.flashcards) {
-                        // Dữ liệu mới: object bọc cả flashcards lẫn streak
                         flashcards = data.flashcards;
                         if (typeof data.study_streak === 'number') {
                             localStorage.setItem('study_streak', data.study_streak);
@@ -1439,9 +1330,6 @@
             });
         }
 
-        // Đăng ký Service Worker (network-first caching + thông báo ngẫu nhiên), rồi gửi kho từ
-        // hiện tại cho nó để bắt đầu quét bắn thông báo ngẫu nhiên trong khung giờ 9h-22h.
-        // Có thể gọi lại hàm này bất cứ lúc nào (VD: sau khi thêm/xóa từ) để đồng bộ kho từ mới nhất.
         function startBackgroundNotifications() {
             if (!('Notification' in window) || Notification.permission !== 'granted') return;
             if (!('serviceWorker' in navigator)) return;
@@ -1474,11 +1362,11 @@
                 tr.className = "hover:bg-slate-50 transition";
                 tr.innerHTML = `
                     <td class="px-3 py-2 font-bold text-slate-800">${card.word.toLowerCase()}</td>
-                    <td class="px-3 py-2 text-slate-400">
-                        ${card.phonetic
-                            ? `<input type="text" value="${card.phonetic}" onchange="updateCardPhoneticDirectly('${card.word}', this.value)" class="w-full bg-transparent hover:bg-white focus:bg-white border-b border-transparent focus:border-blue-500 px-1 py-0.5 text-xs focus:outline-none transition">`
-                            : `<button onclick="fetchPhoneticForCard('${card.word}')" class="text-blue-500 hover:text-blue-700 text-[10px] underline">Lấy phiên âm</button>`
-                        }
+                    <td class="px-3 py-2">
+                        <input type="text" value="${card.phonetic || ''}" 
+                            placeholder="/.../"
+                            onchange="updateCardPhoneticDirectly('${card.word}', this.value)" 
+                            class="w-24 bg-transparent hover:bg-white focus:bg-white border-b border-transparent focus:border-blue-500 px-1 py-0.5 text-[11px] font-mono text-slate-500 focus:outline-none transition">
                     </td>
                     <td class="px-3 py-2 text-[10px] italic text-slate-400">${card.type || 'N/A'}</td>
                     <td class="px-3 py-2"><span class="bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">${card.deck || 'Mặc định'}</span></td>
@@ -1495,6 +1383,16 @@
                 `;
                 tbody.appendChild(tr);
             });
+        }
+
+        function updateCardPhoneticDirectly(word, newPhoneticValue) {
+            const idx = flashcards.findIndex(c => c.word.toLowerCase() === word.toLowerCase());
+            if (idx !== -1) {
+                flashcards[idx].phonetic = newPhoneticValue.trim();
+                saveLocalAndSyncCloud();
+                refreshDashboard();
+                updateFlashcardUI();
+            }
         }
 
         function updateCardVietnameseDirectly(word, newVnValue) {
@@ -1514,7 +1412,7 @@
                 currentCardIndex = 0;
                 refreshDashboard();
                 updateFlashcardUI();
-                startBackgroundNotifications(); // Đồng bộ kho từ mới nhất cho SW (nếu đã cấp quyền thông báo)
+                startBackgroundNotifications();
             }
         }
 
@@ -1523,12 +1421,8 @@
         refreshDashboard();
         autoLoadFirebaseConfig();
 
-        // Đăng ký Service Worker (network-first caching để luôn lấy bản mới nhất khi có mạng,
-        // và xử lý thông báo ngẫu nhiên nhắc học từ)
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').then(() => {
-                // Nếu người dùng đã từng cấp quyền thông báo ở phiên trước, tự bật lại luôn
-                // mà không cần bấm nút "Bật thông báo" mỗi lần mở app
                 if ('Notification' in window && Notification.permission === 'granted') {
                     startBackgroundNotifications();
                 }
