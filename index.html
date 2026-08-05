@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI English Flashcards v3.4 Pro</title>
+    <title>AI English Flashcards v3.5 Pro</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
@@ -613,7 +613,7 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
-        // ================= HÀM TRA TỪ SIÊU TỐC (HYBRID 2 THÌ) =================
+        // ================= HÀM TRA TỪ SIÊU TỐC (HYBRID 2 THÌ + AUTO IPA FALLBACK) =================
         async function translateWord() {
             const rawInput = document.getElementById('word-input').value.trim();
             if (!rawInput) return alert('Hãy gõ từ cần tra!');
@@ -645,7 +645,7 @@
             let imageUrl = DEFAULT_FALLBACK_IMG;
 
             try {
-                // THÌ 1: Lấy Nghĩa + IPA cực nhanh (< 0.2s)
+                // THÌ 1: Lấy Nghĩa + IPA cực nhanh (< 0.2s từ Google Translate & Dictionary API)
                 const [transRes, dictRes] = await Promise.allSettled([
                     fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(cleanInput)}`).then(r => r.json()),
                     fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanInput)}`).then(r => r.json())
@@ -688,7 +688,7 @@
                 btnTranslate.disabled = false;
                 btnTranslate.innerText = "Tra từ";
 
-                // THÌ 2: Gọi Groq AI ngầm ở phía sau để cập nhật Mẹo nhớ + Ví dụ sinh động
+                // THÌ 2: Gọi Groq AI ngầm ở phía sau để lấy Mẹo nhớ + Ví dụ + TỰ ĐIỀN PHIÊN ÂM IPA (nếu Thì 1 chưa có)
                 if (!DICTIONARY_OVERRIDE[cleanInput]) {
                     fetch('/api/translate', {
                         method: 'POST',
@@ -701,7 +701,11 @@
                             if (aiData.mnemonic) currentTranslationData.mnemonic = aiData.mnemonic;
                             if (aiData.examples && aiData.examples.length > 0) currentTranslationData.examples = aiData.examples;
                             if (aiData.image_url) currentTranslationData.image_url = aiData.image_url;
-                            if (aiData.phonetic && !currentTranslationData.phonetic) currentTranslationData.phonetic = aiData.phonetic;
+                            
+                            // Nếu ở Thì 1 chưa có IPA, cập nhật ngay IPA do Groq AI trả về
+                            if (aiData.phonetic && !currentTranslationData.phonetic) {
+                                currentTranslationData.phonetic = aiData.phonetic;
+                            }
 
                             renderTranslationResult(currentTranslationData);
                             searchCache[cleanInput] = { ...currentTranslationData };
