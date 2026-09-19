@@ -2,7 +2,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
-    const { word } = req.body;
+    const { word } = req.body || {};
     if (!word) {
         return res.status(400).json({ error: 'Thiếu từ cần tra!' });
     }
@@ -10,7 +10,15 @@ export default async function handler(req, res) {
     if (!apiKey) {
         return res.status(500).json({ error: 'Chưa cấu hình GROQ_API_KEY trên Vercel!' });
     }
-    const PIXABAY_KEY = '56753602-ea75e73c98316218e67432c1e';
+
+    // Model có thể đổi bằng biến môi trường GROQ_MODEL trên Vercel mà không cần sửa code.
+    // llama-3.3-70b-versatile đã bị Groq ngừng từ 16/08/2026 -> dùng openai/gpt-oss-120b.
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+
+    // Key Pixabay lấy từ biến môi trường PIXABAY_KEY (không ghi thẳng trong code nữa).
+    // Nếu chưa cấu hình thì dùng ảnh mặc định.
+    const PIXABAY_KEY = process.env.PIXABAY_KEY || '';
+    const FALLBACK_IMG = "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=600";
 
     const prompt = `Bạn là một giáo viên tiếng Anh sáng tạo, hài hước, chuyên nghĩ ra mẹo nhớ từ vựng "không đụng hàng" cho học sinh Việt Nam.
 
@@ -31,27 +39,46 @@ Lưu ý bắt buộc về định dạng mỗi phần tử trong "examples": vi�
 
 Không viết bất kỳ chữ hay khối markdown nào bên ngoài JSON.`;
 
+    // Lấy ảnh từ Pixabay chạy SONG SONG với Groq để nhanh hơn (không bao giờ throw lỗi)
+    const imagePromise = (async () => {
+        if (!PIXABAY_KEY) return FALLBACK_IMG;
+        try {
+            const query = encodeURIComponent(word.trim().toLowerCase());
+            const url = `https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${query}&image_type=photo&per_page=3`;
+            const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+            const d = await r.json();
+            return d.hits?.[0]?.webformatURL || FALLBACK_IMG;
+        } catch (e) {
+            return FALLBACK_IMG;
+        }
+    })();
+
     try {
-        // 1. Gọi Groq API — temperature cao hơn để mẹo nhớ và ví dụ đa dạng, sáng tạo, không lặp công thức
+        // Chỉ model gpt-oss mới hỗ trợ reasoning_effort
+        const body = {
+            model: GROQ_MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.95,
+            response_format: { type: "json_object" }
+        };
+        if (GROQ_MODEL.includes('gpt-oss')) {
+            body.reasoning_effort = 'low'; // suy luận ít -> trả lời nhanh hơn
+        }
+
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey.trim()}`
             },
-            body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.95,
-                response_format: { type: "json_object" }
-            })
+            body: JSON.stringify(body)
         });
         const data = await groqRes.json();
         if (!groqRes.ok || data.error) {
             const errorMsg = data.error?.message || (typeof data.error === 'string' ? data.error : 'Lỗi từ Groq API');
             return res.status(groqRes.status || 500).json({ error: `Lỗi xử lý AI: ${errorMsg}` });
         }
-        let candidateText = data.choices?.[0]?.message?.content;
+        const candidateText = data.choices?.[0]?.message?.content;
         if (!candidateText) {
             return res.status(500).json({ error: 'Groq AI không trả về dữ liệu phản hồi.' });
         }
@@ -63,22 +90,7 @@ Không viết bất kỳ chữ hay khối markdown nào bên ngoài JSON.`;
         }
         const parsedResult = JSON.parse(cleanJSON);
 
-        // 2. Lấy hình ảnh từ Pixabay API
-        try {
-            const query = encodeURIComponent(word.trim().toLowerCase());
-            const pixabayUrl = `https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${query}&image_type=photo&per_page=3`;
-
-            const pixabayResponse = await fetch(pixabayUrl);
-            const pixabayData = await pixabayResponse.json();
-
-            if (pixabayData.hits && pixabayData.hits.length > 0) {
-                parsedResult.image_url = pixabayData.hits[0].webformatURL;
-            } else {
-                parsedResult.image_url = "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=600";
-            }
-        } catch (imgErr) {
-            parsedResult.image_url = "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=600";
-        }
+        parsedResult.image_url = await imagePromise;
 
         return res.status(200).json(parsedResult);
     } catch (err) {
