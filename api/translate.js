@@ -31,8 +31,7 @@ Phân tích từ tiếng Anh "${word}" và trả về DUY NHẤT một object JS
   "examples": [
     "Một câu ví dụ tiếng Anh tự nhiên, đời thường, có ngữ cảnh cụ thể (không phải câu mẫu chung chung như 'I study the word') - nghĩa tiếng Việt của câu đó",
     "Một câu ví dụ tiếng Anh KHÁC hẳn ngữ cảnh với câu 1 ở trên - nghĩa tiếng Việt của câu đó"
-  ],
-  "image_url": ""
+  ]
 }
 
 Lưu ý bắt buộc về định dạng mỗi phần tử trong "examples": viết đúng theo mẫu "Câu tiếng Anh - Nghĩa tiếng Việt của câu đó", dùng dấu gạch ngang " - " để phân tách, không dùng dấu ngoặc hay ký hiệu khác.
@@ -89,6 +88,15 @@ Không viết bất kỳ chữ hay khối markdown nào bên ngoài JSON.`;
             cleanJSON = cleanJSON.replace(/^```/, '').replace(/```$/, '').trim();
         }
         const parsedResult = JSON.parse(cleanJSON);
+
+        // Lọc danh sách ví dụ: bỏ các phần tử rác (rỗng, ":", "image_url"...) do model trả thừa
+        let examples = parsedResult.examples;
+        if (typeof examples === 'string') examples = [examples];
+        parsedResult.examples = (Array.isArray(examples) ? examples : [])
+            .filter(e => typeof e === 'string')
+            .map(e => e.trim())
+            .filter(e => e.length >= 15 && /[a-zA-Z]{3,}/.test(e) && e.toLowerCase() !== 'image_url')
+            .slice(0, 3);
 
         parsedResult.image_url = await imagePromise;
 
