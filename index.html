@@ -613,22 +613,65 @@
             document.getElementById(`btn-${tabId}`).className = "tab-btn bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm transition";
         }
 
-        // ================= HÀM TRA TỪ SIÊU TỐC (HYBRID 2 THÌ + AUTO IPA FALLBACK) =================
+        // ================= HÀM TRA TỪ (BẢN SỬA LỖI CHẬM: TIMEOUT + HIỆN KẾT QUẢ NGAY) =================
+        // Đặt false nếu muốn tắt hẳn phần mẹo nhớ/ví dụ từ /api/translate (ví dụ khi API AI đang hỏng)
+        const ENABLE_AI_API = true;
+
+        // fetch có giới hạn thời gian: quá thời gian sẽ tự hủy thay vì treo mãi
+        function fetchJSON(url, opts = {}, ms = 4000) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), ms);
+            return fetch(url, { ...opts, signal: ctrl.signal })
+                .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .finally(() => clearTimeout(timer));
+        }
+
         async function translateWord() {
             const rawInput = document.getElementById('word-input').value.trim();
             if (!rawInput) return alert('Hãy gõ từ cần tra!');
-            
+
             const cleanInput = rawInput.toLowerCase().trim();
             const btnTranslate = document.getElementById('btn-translate');
             const resBox = document.getElementById('result-box');
             const addBtnWrapper = document.getElementById('add-btn-wrapper');
-            
-            // Nếu từ đã nằm trong Cache -> Bật ngay lập tức trong 0.001s!
-            if (searchCache[cleanInput]) {
-                currentTranslationData = searchCache[cleanInput];
+
+            // Chỉ vẽ lại nếu người dùng chưa chuyển sang tra từ khác
+            const show = () => {
+                if (!currentTranslationData || currentTranslationData.word !== cleanInput) return;
                 renderTranslationResult(currentTranslationData);
                 resBox.classList.remove('hidden');
                 addBtnWrapper.classList.remove('hidden');
+            };
+
+            // Từ đã có trong cache -> hiện ngay
+            if (searchCache[cleanInput]) {
+                currentTranslationData = searchCache[cleanInput];
+                show();
+                return;
+            }
+
+            const data = {
+                word: cleanInput,
+                phonetic: "",
+                type: "Noun",
+                vietnamese: cleanInput,
+                mnemonic: "",
+                examples: [`I study the word '${cleanInput}' every day.`],
+                image_url: DEFAULT_FALLBACK_IMG,
+                image: DEFAULT_FALLBACK_IMG
+            };
+            currentTranslationData = data;
+
+            // Từ có sẵn trong bộ nhớ riêng -> hiện ngay, khỏi gọi mạng
+            if (DICTIONARY_OVERRIDE[cleanInput]) {
+                const item = DICTIONARY_OVERRIDE[cleanInput];
+                data.vietnamese = item.meaning;
+                data.phonetic = item.phonetic || "";
+                data.type = item.type;
+                data.mnemonic = item.mnemonic;
+                data.examples = [item.ex];
+                searchCache[cleanInput] = { ...data };
+                show();
                 return;
             }
 
@@ -637,93 +680,56 @@
             resBox.classList.add('hidden');
             addBtnWrapper.classList.add('hidden');
 
-            let vietnameseMeaning = "";
-            let phoneticText = "";
-            let wordType = "Noun";
-            let mnemonic = "💡 AI đang suy nghĩ mẹo nhớ...";
-            let examples = [`I study the word '${cleanInput}' every day.`];
-            let imageUrl = DEFAULT_FALLBACK_IMG;
+            // CHẠY NỀN 1: phiên âm (không chặn kết quả chính)
+            fetchJSON(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanInput)}`, {}, 4000)
+                .then(d => {
+                    const p = d?.[0]?.phonetic || d?.[0]?.phonetics?.find(x => x.text)?.text;
+                    if (p && !data.phonetic) {
+                        data.phonetic = p;
+                        searchCache[cleanInput] = { ...data };
+                        show();
+                    }
+                })
+                .catch(() => {});
 
-            try {
-                // THÌ 1: Lấy Nghĩa + IPA cực nhanh (< 0.2s từ Google Translate & Dictionary API)
-                const [transRes, dictRes] = await Promise.allSettled([
-                    fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(cleanInput)}`).then(r => r.json()),
-                    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanInput)}`).then(r => r.json())
-                ]);
-
-                if (transRes.status === 'fulfilled' && transRes.value?.[0]?.[0]?.[0]) {
-                    vietnameseMeaning = transRes.value[0][0][0].toLowerCase();
-                    if (transRes.value[1]?.[0]?.[0]) wordType = transRes.value[1][0][0];
-                }
-
-                if (dictRes.status === 'fulfilled' && dictRes.value?.[0]) {
-                    const dData = dictRes.value[0];
-                    phoneticText = dData.phonetic || (dData.phonetics && dData.phonetics.find(p => p.text)?.text) || "";
-                }
-
-                if (DICTIONARY_OVERRIDE[cleanInput]) {
-                    const item = DICTIONARY_OVERRIDE[cleanInput];
-                    vietnameseMeaning = item.meaning;
-                    if (item.phonetic) phoneticText = item.phonetic;
-                    wordType = item.type;
-                    mnemonic = item.mnemonic;
-                    examples = [item.ex];
-                }
-
-                currentTranslationData = {
-                    word: cleanInput,
-                    phonetic: phoneticText,
-                    type: wordType,
-                    vietnamese: vietnameseMeaning || cleanInput,
-                    mnemonic: mnemonic,
-                    examples: examples,
-                    image_url: imageUrl,
-                    image: imageUrl
-                };
-
-                // HIỂN THỊ KẾT QUẢ NGAY LẬP TỨC CHO NGƯỜI DÙNG!
-                renderTranslationResult(currentTranslationData);
-                resBox.classList.remove('hidden');
-                addBtnWrapper.classList.remove('hidden');
-                btnTranslate.disabled = false;
-                btnTranslate.innerText = "Tra từ";
-
-                // THÌ 2: Gọi Groq AI ngầm ở phía sau để lấy Mẹo nhớ + Ví dụ + TỰ ĐIỀN PHIÊN ÂM IPA (nếu Thì 1 chưa có)
-                if (!DICTIONARY_OVERRIDE[cleanInput]) {
-                    fetch('/api/translate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ word: cleanInput })
+            // CHẠY NỀN 2: mẹo nhớ + ví dụ từ /api/translate (có timeout, có dự phòng khi lỗi)
+            if (ENABLE_AI_API) {
+                fetchJSON('/api/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ word: cleanInput })
+                }, 8000)
+                    .then(ai => {
+                        if (!ai || ai.error) throw new Error('ai error');
+                        if (ai.mnemonic) data.mnemonic = ai.mnemonic;
+                        if (ai.examples && ai.examples.length > 0) data.examples = ai.examples;
+                        if (ai.image_url) { data.image_url = ai.image_url; data.image = ai.image_url; }
+                        if (ai.phonetic && !data.phonetic) data.phonetic = ai.phonetic;
                     })
-                    .then(res => res.json())
-                    .then(aiData => {
-                        if (aiData && !aiData.error) {
-                            if (aiData.mnemonic) currentTranslationData.mnemonic = aiData.mnemonic;
-                            if (aiData.examples && aiData.examples.length > 0) currentTranslationData.examples = aiData.examples;
-                            if (aiData.image_url) currentTranslationData.image_url = aiData.image_url;
-                            
-                            // Nếu ở Thì 1 chưa có IPA, cập nhật ngay IPA do Groq AI trả về
-                            if (aiData.phonetic && !currentTranslationData.phonetic) {
-                                currentTranslationData.phonetic = aiData.phonetic;
-                            }
-
-                            renderTranslationResult(currentTranslationData);
-                            searchCache[cleanInput] = { ...currentTranslationData };
-                        }
-                    })
-                    .catch(err => {
-                        currentTranslationData.mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${currentTranslationData.vietnamese}`;
-                        renderTranslationResult(currentTranslationData);
+                    .catch(() => {})
+                    .finally(() => {
+                        if (!data.mnemonic) data.mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${data.vietnamese}`;
+                        searchCache[cleanInput] = { ...data };
+                        show();
                     });
-                } else {
-                    searchCache[cleanInput] = { ...currentTranslationData };
-                }
-
-            } catch (err) {
-                alert(`Lỗi tra từ vựng: ${err.message}`);
-                btnTranslate.disabled = false;
-                btnTranslate.innerText = "Tra từ";
+            } else {
+                data.mnemonic = `Nhớ từ "${cleanInput}" gắn liền với nghĩa: ${data.vietnamese}`;
             }
+
+            // NGUỒN CHÍNH: nghĩa tiếng Việt -> hiện kết quả ngay khi có (tối đa 4 giây)
+            try {
+                const t = await fetchJSON(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dt=bd&q=${encodeURIComponent(cleanInput)}`, {}, 4000);
+                if (t?.[0]?.[0]?.[0]) data.vietnamese = t[0][0][0].toLowerCase();
+                if (t?.[1]?.[0]?.[0]) data.type = t[1][0][0];
+            } catch (err) {
+                // Google lỗi/quá thời gian: vẫn hiện từ, nghĩa tạm là chính từ đó
+            }
+
+            if (!data.mnemonic) data.mnemonic = "💡 Đang tải mẹo nhớ...";
+            searchCache[cleanInput] = { ...data };
+            show();
+            btnTranslate.disabled = false;
+            btnTranslate.innerText = "Tra từ";
         }
 
         function renderTranslationResult(data) {
